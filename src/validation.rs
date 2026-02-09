@@ -155,16 +155,13 @@ impl RdfValidator {
         }
 
         ValidationResult {
-            valid: violations
-                .iter()
-                .all(|v| v.severity != Severity::Error),
+            valid: violations.iter().all(|v| v.severity != Severity::Error),
             violations,
         }
     }
 
     fn has_property(&self, document: &RdfDocument, property: &str) -> bool {
-        document.get(property).is_some()
-            && !document.get(property).unwrap().is_null()
+        document.get(property).is_some() && !document.get(property).unwrap().is_null()
     }
 
     fn is_valid_date(&self, value: &Value) -> bool {

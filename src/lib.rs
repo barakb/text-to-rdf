@@ -33,22 +33,22 @@
 use async_trait::async_trait;
 use std::env;
 
+pub mod entity_linker;
 pub mod error;
 pub mod extractor;
-pub mod types;
-pub mod normalize;
-pub mod entity_linker;
-pub mod validation;
 pub mod gliner_extractor;
+pub mod normalize;
+pub mod types;
+pub mod validation;
 
+pub use entity_linker::{EntityLinker, EntityLinkerConfig, LinkedEntity, LinkingStrategy};
 pub use error::{Error, Result};
 pub use extractor::GenAiExtractor;
-pub use types::{RdfDocument, RdfEntity, EntityType};
-pub use entity_linker::{EntityLinker, EntityLinkerConfig, LinkedEntity, LinkingStrategy};
-pub use validation::{RdfValidator, ValidationResult, ValidationRule, Violation, Severity};
+pub use types::{EntityType, RdfDocument, RdfEntity};
+pub use validation::{RdfValidator, Severity, ValidationResult, ValidationRule, Violation};
 
 #[cfg(feature = "gliner")]
-pub use gliner_extractor::{GlinerExtractor, GlinerConfig};
+pub use gliner_extractor::{GlinerConfig, GlinerExtractor};
 
 /// Initialize the library by loading .env file
 ///
@@ -141,8 +141,8 @@ impl ExtractionConfig {
             ));
         }
 
-        let model = env::var("RDF_EXTRACTION_MODEL")
-            .unwrap_or_else(|_| "claude-3-5-sonnet".to_string());
+        let model =
+            env::var("RDF_EXTRACTION_MODEL").unwrap_or_else(|_| "claude-3-5-sonnet".to_string());
 
         let temperature = env::var("GENAI_TEMPERATURE")
             .ok()
@@ -298,13 +298,14 @@ mod tests {
     fn test_default_config() {
         let config = ExtractionConfig::default();
         assert_eq!(config.model, "claude-3-5-sonnet");
-        assert!(config.ontologies.contains(&"https://schema.org/".to_string()));
+        assert!(config
+            .ontologies
+            .contains(&"https://schema.org/".to_string()));
     }
 
     #[test]
     fn test_config_with_system_prompt() {
-        let config = ExtractionConfig::new()
-            .with_system_prompt("Custom prompt");
+        let config = ExtractionConfig::new().with_system_prompt("Custom prompt");
 
         assert_eq!(config.system_prompt, Some("Custom prompt".to_string()));
     }
@@ -320,5 +321,3 @@ mod tests {
         assert_eq!(2 + 2, 4);
     }
 }
-
-

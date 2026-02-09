@@ -112,8 +112,8 @@ fn extract_triples_from_jsonld(jsonld: &Value) -> HashSet<Triple> {
 #[test]
 fn test_load_test_cases() {
     let test_cases_path = "tests/fixtures/test_cases.json";
-    let contents = fs::read_to_string(test_cases_path)
-        .expect("Should be able to read test cases file");
+    let contents =
+        fs::read_to_string(test_cases_path).expect("Should be able to read test cases file");
 
     let test_cases: Vec<TestCase> =
         serde_json::from_str(&contents).expect("Should be able to parse test cases JSON");
@@ -207,8 +207,8 @@ fn test_perfect_match() {
 /// Automatically uses local Ollama if no GENAI_API_KEY is provided
 #[test]
 fn test_end_to_end_extraction() {
-    use text_to_rdf::{ExtractionConfig, GenAiExtractor, RdfExtractor};
     use std::env;
+    use text_to_rdf::{ExtractionConfig, GenAiExtractor, RdfExtractor};
 
     // Check if we should run this test
     let has_api_key = env::var("GENAI_API_KEY").is_ok();
@@ -223,8 +223,8 @@ fn test_end_to_end_extraction() {
     }
 
     let test_cases_path = "tests/fixtures/test_cases.json";
-    let contents = fs::read_to_string(test_cases_path)
-        .expect("Should be able to read test cases file");
+    let contents =
+        fs::read_to_string(test_cases_path).expect("Should be able to read test cases file");
 
     let test_cases: Vec<TestCase> =
         serde_json::from_str(&contents).expect("Should be able to parse test cases JSON");
@@ -306,8 +306,8 @@ fn test_jsonld_validation() {
     use text_to_rdf::RdfDocument;
 
     let test_cases_path = "tests/fixtures/test_cases.json";
-    let contents = fs::read_to_string(test_cases_path)
-        .expect("Should be able to read test cases file");
+    let contents =
+        fs::read_to_string(test_cases_path).expect("Should be able to read test cases file");
 
     let test_cases: Vec<TestCase> =
         serde_json::from_str(&contents).expect("Should be able to parse test cases JSON");
@@ -327,8 +327,10 @@ fn test_jsonld_validation() {
 /// Automatically uses local Ollama if no GENAI_API_KEY is provided
 #[test]
 fn test_entity_linking_integration() {
-    use text_to_rdf::{EntityLinker, ExtractionConfig, GenAiExtractor, RdfExtractor, LinkingStrategy};
     use std::env;
+    use text_to_rdf::{
+        EntityLinker, ExtractionConfig, GenAiExtractor, LinkingStrategy, RdfExtractor,
+    };
 
     // Check if we should run this test
     let has_api_key = env::var("GENAI_API_KEY").is_ok();
@@ -408,7 +410,9 @@ fn test_entity_linking_integration() {
             println!("{}", result.to_json().unwrap());
         } else {
             println!("✗ No entity link found (confidence too low or service unavailable)");
-            println!("Note: This may be expected if DBpedia Spotlight is down or the entity is uncommon");
+            println!(
+                "Note: This may be expected if DBpedia Spotlight is down or the entity is uncommon"
+            );
         }
     } else {
         panic!("Extracted result should have a name property");
@@ -418,8 +422,8 @@ fn test_entity_linking_integration() {
 /// Test validation with entity linking
 #[test]
 fn test_validation_with_linking() {
-    use text_to_rdf::{RdfDocument, RdfValidator};
     use serde_json::json;
+    use text_to_rdf::{RdfDocument, RdfValidator};
 
     // Document with canonical URI (as if from entity linking)
     let doc = RdfDocument::from_value(json!({

@@ -205,7 +205,10 @@ mod tests {
             .with_name("Test Person");
 
         assert_eq!(entity.entity_type, EntityType::Person);
-        assert_eq!(entity.id, Some("https://example.org/person/test".to_string()));
+        assert_eq!(
+            entity.id,
+            Some("https://example.org/person/test".to_string())
+        );
         assert_eq!(entity.name, Some("Test Person".to_string()));
     }
 

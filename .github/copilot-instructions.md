@@ -42,6 +42,7 @@ When writing extraction logic, follow this sequence:
 - **Validation**: Every public function must be documented with `///` and include a `# Errors` section.
 - **Testing**: Include unit tests for extraction logic using small, deterministic text samples.
 - **Commands**:
+    - Format: `cargo fmt --all`
     - Build: `cargo build`
     - Test: `cargo test`
     - Lint: `cargo clippy --lib -- -W clippy::pedantic -W clippy::nursery -D warnings` 

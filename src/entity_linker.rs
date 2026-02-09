@@ -130,12 +130,13 @@ impl EntityLinker {
         let store = if config.strategy == LinkingStrategy::Local {
             // Load local RDF knowledge base from filesystem
             if let Some(kb_path) = &config.local_kb_path {
-                let store = Store::open(kb_path)
-                    .map_err(|e| Error::Config(format!("Failed to open local KB at {:?}: {}", kb_path, e)))?;
+                let store = Store::open(kb_path).map_err(|e| {
+                    Error::Config(format!("Failed to open local KB at {:?}: {}", kb_path, e))
+                })?;
                 Some(Arc::new(store))
             } else {
                 return Err(Error::Config(
-                    "Local strategy requires local_kb_path to be set".to_string()
+                    "Local strategy requires local_kb_path to be set".to_string(),
                 ));
             }
         } else {
@@ -149,7 +150,11 @@ impl EntityLinker {
             None
         };
 
-        Ok(Self { config, store, llm_client })
+        Ok(Self {
+            config,
+            store,
+            llm_client,
+        })
     }
 
     /// Link an entity name to a canonical URI
@@ -166,12 +171,8 @@ impl EntityLinker {
         }
 
         match self.config.strategy {
-            LinkingStrategy::Local => {
-                self.link_with_local(entity_name, _entity_type).await
-            }
-            LinkingStrategy::DbpediaSpotlight => {
-                self.link_with_dbpedia(text, entity_name).await
-            }
+            LinkingStrategy::Local => self.link_with_local(entity_name, _entity_type).await,
+            LinkingStrategy::DbpediaSpotlight => self.link_with_dbpedia(text, entity_name).await,
             LinkingStrategy::Wikidata => {
                 // Wikidata API implementation would go here
                 Ok(None)
@@ -210,9 +211,10 @@ impl EntityLinker {
         entity_name: &str,
         entity_type: Option<&str>,
     ) -> Result<Option<LinkedEntity>> {
-        let store = self.store.as_ref().ok_or_else(|| {
-            Error::Config("Local store not initialized".to_string())
-        })?;
+        let store = self
+            .store
+            .as_ref()
+            .ok_or_else(|| Error::Config("Local store not initialized".to_string()))?;
 
         // Step 1: Retrieve candidates using fuzzy or exact matching
         let mut candidates = if self.config.use_fuzzy_matching {
@@ -230,8 +232,11 @@ impl EntityLinker {
 
         // Step 3: If multiple candidates exist, use LLM disambiguation
         if candidates.len() >= self.config.min_candidates_for_llm
-            && self.config.use_llm_disambiguation {
-            return self.disambiguate_with_llm(entity_name, entity_type, &candidates).await;
+            && self.config.use_llm_disambiguation
+        {
+            return self
+                .disambiguate_with_llm(entity_name, entity_type, &candidates)
+                .await;
         }
 
         // Step 4: Return best match (highest confidence)
@@ -338,15 +343,13 @@ impl EntityLinker {
                         })
                         .unwrap_or_else(|| entity_name.to_string());
 
-                    let type_str = solution
-                        .get("type")
-                        .and_then(|t| {
-                            if let Term::NamedNode(node) = t {
-                                Some(node.as_str().to_string())
-                            } else {
-                                None
-                            }
-                        });
+                    let type_str = solution.get("type").and_then(|t| {
+                        if let Term::NamedNode(node) = t {
+                            Some(node.as_str().to_string())
+                        } else {
+                            None
+                        }
+                    });
 
                     let types = if let Some(t) = type_str {
                         vec![t]

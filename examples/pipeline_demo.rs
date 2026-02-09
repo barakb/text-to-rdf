@@ -5,10 +5,7 @@
 //! - Stage 2: Entity linking (DBpedia)
 //! - Stage 5: SHACL-like validation
 
-use text_to_rdf::{
-    EntityLinker, ExtractionConfig, GenAiExtractor,
-    RdfExtractor, RdfValidator,
-};
+use text_to_rdf::{EntityLinker, ExtractionConfig, GenAiExtractor, RdfExtractor, RdfValidator};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

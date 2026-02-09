@@ -3,8 +3,8 @@
 //! - Entity names: Uses `slug` crate for robust Unicode handling
 //! - Predicates: Uses `rust-stemmers` for relation normalization (e.g., "runs"/"running" → "run")
 
-use slug::slugify;
 use rust_stemmers::{Algorithm, Stemmer};
+use slug::slugify;
 
 /// Normalize an entity name for consistent RDF representation
 ///
@@ -57,7 +57,8 @@ pub fn normalize_predicate(predicate: &str) -> String {
     if normalized.chars().any(|c| c.is_uppercase()) {
         // Split on uppercase boundaries
         let words = split_camel_case(&normalized);
-        words.iter()
+        words
+            .iter()
             .map(|w| stemmer.stem(w).to_string())
             .collect::<Vec<_>>()
             .join("_")
@@ -94,8 +95,12 @@ pub fn normalize_jsonld_value(value: &mut serde_json::Value) {
     match value {
         Value::String(s) => {
             // Don't normalize URLs, dates, or @context values
-            if !s.starts_with("http") && !s.contains("://") && !s.contains('-')
-                && s.chars().any(|c| c.is_whitespace()) && s.chars().filter(|c| c.is_uppercase()).count() > 0 {
+            if !s.starts_with("http")
+                && !s.contains("://")
+                && !s.contains('-')
+                && s.chars().any(|c| c.is_whitespace())
+                && s.chars().filter(|c| c.is_uppercase()).count() > 0
+            {
                 // Likely a proper name with spaces
                 *s = normalize_entity_name(s);
             }
@@ -139,14 +144,20 @@ mod tests {
     fn test_normalize_unicode() {
         // Test Unicode handling
         assert_eq!(normalize_entity_name("José García"), "jose_garcia");
-        assert_eq!(normalize_entity_name("Björk Guðmundsdóttir"), "bjork_gudmundsdottir");
+        assert_eq!(
+            normalize_entity_name("Björk Guðmundsdóttir"),
+            "bjork_gudmundsdottir"
+        );
         assert_eq!(normalize_entity_name("Cañón City"), "canon_city");
     }
 
     #[test]
     fn test_normalize_special_chars() {
         // Test special character handling
-        assert_eq!(normalize_entity_name("AT&T Corporation"), "at_t_corporation");
+        assert_eq!(
+            normalize_entity_name("AT&T Corporation"),
+            "at_t_corporation"
+        );
         assert_eq!(normalize_entity_name("O'Reilly Media"), "o_reilly_media");
     }
 

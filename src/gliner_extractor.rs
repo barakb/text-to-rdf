@@ -15,15 +15,15 @@
 #[cfg(feature = "gliner")]
 use crate::error::{Error, Result};
 #[cfg(feature = "gliner")]
-use crate::types::{RdfDocument, EntityType};
+use crate::types::{EntityType, RdfDocument};
 #[cfg(feature = "gliner")]
 use crate::RdfExtractor;
 #[cfg(feature = "gliner")]
 use async_trait::async_trait;
 #[cfg(feature = "gliner")]
-use gliner::model::{GLiNER, input::text::TextInput, params::Parameters};
-#[cfg(feature = "gliner")]
 use gliner::model::pipeline::span::SpanMode;
+#[cfg(feature = "gliner")]
+use gliner::model::{input::text::TextInput, params::Parameters, GLiNER};
 #[cfg(feature = "gliner")]
 use orp::params::RuntimeParameters;
 #[cfg(feature = "gliner")]
@@ -174,12 +174,12 @@ impl GlinerExtractor {
         let model = GLiNER::<SpanMode>::new(
             Parameters::default(),
             runtime_params,
-            tokenizer_path.to_str().ok_or_else(|| {
-                Error::Config("Invalid tokenizer path".to_string())
-            })?,
-            model_onnx_path.to_str().ok_or_else(|| {
-                Error::Config("Invalid model path".to_string())
-            })?,
+            tokenizer_path
+                .to_str()
+                .ok_or_else(|| Error::Config("Invalid tokenizer path".to_string()))?,
+            model_onnx_path
+                .to_str()
+                .ok_or_else(|| Error::Config("Invalid model path".to_string()))?,
         )
         .map_err(|e| Error::Config(format!("Failed to load GLiNER model: {}", e)))?;
 
@@ -189,18 +189,22 @@ impl GlinerExtractor {
     /// Extract entities with provenance (character offsets)
     ///
     /// Returns entities with exact start/end positions in the original text
-    fn extract_entities_with_provenance(
-        &self,
-        text: &str,
-    ) -> Result<Vec<ExtractedEntity>> {
+    fn extract_entities_with_provenance(&self, text: &str) -> Result<Vec<ExtractedEntity>> {
         // Create input with single text and configured entity types
-        let entity_type_refs: Vec<&str> = self.config.entity_types.iter().map(|s| s.as_str()).collect();
+        let entity_type_refs: Vec<&str> = self
+            .config
+            .entity_types
+            .iter()
+            .map(|s| s.as_str())
+            .collect();
 
         let input = TextInput::from_str(&[text], &entity_type_refs)
             .map_err(|e| Error::Extraction(format!("Failed to create TextInput: {}", e)))?;
 
         // Run inference
-        let output = self.model.inference(input)
+        let output = self
+            .model
+            .inference(input)
             .map_err(|e| Error::Extraction(format!("GLiNER inference failed: {}", e)))?;
 
         // Extract spans from first result (we only passed one text)
@@ -348,7 +352,7 @@ pub struct GlinerExtractor;
 impl GlinerExtractor {
     pub fn new(_config: GlinerConfig) -> Result<Self, crate::error::Error> {
         Err(crate::error::Error::Config(
-            "GLiNER feature not enabled. Rebuild with --features gliner".to_string()
+            "GLiNER feature not enabled. Rebuild with --features gliner".to_string(),
         ))
     }
 }
@@ -368,10 +372,7 @@ mod tests {
     #[test]
     fn test_schema_mapping() {
         // Test the mapping function without needing a model
-        assert_eq!(
-            serialize_entity_type(&EntityType::Person),
-            "Person"
-        );
+        assert_eq!(serialize_entity_type(&EntityType::Person), "Person");
         assert_eq!(
             serialize_entity_type(&EntityType::Organization),
             "Organization"
