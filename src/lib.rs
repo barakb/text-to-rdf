@@ -71,6 +71,11 @@ pub struct ExtractionConfig {
     /// The AI model to use (e.g., "claude-3-5-sonnet", "gpt-4o", "gemini-1.5-pro")
     pub model: String,
 
+    /// Optional model for simple entity extraction (e.g., "llama3.2:3b")
+    /// If set, this faster/cheaper model is used for simple tasks,
+    /// while the main model is reserved for complex relation extraction
+    pub simple_model: Option<String>,
+
     /// Temperature for AI generation (0.0 - 1.0)
     pub temperature: Option<f32>,
 
@@ -92,12 +97,17 @@ pub struct ExtractionConfig {
 
     /// Enable strict schema validation with detailed error messages (default: true)
     pub strict_validation: bool,
+
+    /// Inject hardcoded @context instead of trusting LLM (default: true)
+    /// Prevents URI hallucinations by using context.jsonld
+    pub inject_hardcoded_context: bool,
 }
 
 impl Default for ExtractionConfig {
     fn default() -> Self {
         Self {
             model: "claude-3-5-sonnet".to_string(),
+            simple_model: None,
             temperature: Some(0.3),
             max_tokens: Some(4096),
             system_prompt: None,
@@ -105,6 +115,7 @@ impl Default for ExtractionConfig {
             entity_linker: EntityLinkerConfig::default(),
             max_retries: 2,
             strict_validation: true,
+            inject_hardcoded_context: true,
         }
     }
 }
@@ -222,8 +233,16 @@ impl ExtractionConfig {
             .and_then(|v| v.parse::<bool>().ok())
             .unwrap_or(true);
 
+        let simple_model = env::var("RDF_EXTRACTION_SIMPLE_MODEL").ok();
+
+        let inject_hardcoded_context = env::var("RDF_EXTRACTION_INJECT_CONTEXT")
+            .ok()
+            .and_then(|v| v.parse::<bool>().ok())
+            .unwrap_or(true);
+
         Ok(Self {
             model,
+            simple_model,
             temperature,
             max_tokens,
             system_prompt,
@@ -231,6 +250,7 @@ impl ExtractionConfig {
             entity_linker,
             max_retries,
             strict_validation,
+            inject_hardcoded_context,
         })
     }
 
@@ -280,6 +300,21 @@ impl ExtractionConfig {
     #[must_use]
     pub const fn with_strict_validation(mut self, strict_validation: bool) -> Self {
         self.strict_validation = strict_validation;
+        self
+    }
+
+    /// Set a simple model for basic entity extraction
+    /// Use a faster/cheaper model like "llama3.2:3b" for simple tasks
+    #[must_use]
+    pub fn with_simple_model(mut self, model: impl Into<String>) -> Self {
+        self.simple_model = Some(model.into());
+        self
+    }
+
+    /// Enable or disable hardcoded context injection
+    #[must_use]
+    pub const fn with_inject_hardcoded_context(mut self, inject: bool) -> Self {
+        self.inject_hardcoded_context = inject;
         self
     }
 }

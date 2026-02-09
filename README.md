@@ -127,6 +127,8 @@ Create a `.env` file in your project root with these variables:
 | `RDF_ONTOLOGIES` | No | `https://schema.org/` | Comma-separated ontology URLs |
 | `RDF_EXTRACTION_MAX_RETRIES` | No | `2` | Max retry attempts for failed extractions |
 | `RDF_EXTRACTION_STRICT_VALIDATION` | No | `true` | Enable strict schema validation with error feedback |
+| `RDF_EXTRACTION_SIMPLE_MODEL` | No | - | Model for simple extraction (e.g., `llama3.2:3b`) |
+| `RDF_EXTRACTION_INJECT_CONTEXT` | No | `true` | Inject hardcoded @context to prevent URI hallucinations |
 | `ENTITY_LINKING_ENABLED` | No | `false` | Enable entity linking |
 | `ENTITY_LINKING_STRATEGY` | No | `none` | Strategy: `local`, `dbpedia`, `wikidata`, or `none` |
 | `ENTITY_LINKING_KB_PATH` | No | - | Path to local RDF knowledge base (for `local` strategy) |
@@ -253,6 +255,131 @@ The validator assigns confidence scores based on violations:
 - Final confidence: 0.75 (still valid if threshold is 0.7)
 
 See [docs/HYBRID_PIPELINE.md](docs/HYBRID_PIPELINE.md) for complete examples.
+
+## Advanced Features
+
+### Hardcoded @context Injection
+
+**Problem**: LLMs often hallucinate incorrect Schema.org URIs or malform the `@context` field.
+
+**Solution**: The library includes a hardcoded `context.jsonld` file that ensures correct URIs regardless of LLM output.
+
+```rust
+let config = ExtractionConfig::new()
+    .with_inject_hardcoded_context(true);  // Default: true
+
+let extractor = GenAiExtractor::new(config)?;
+let doc = extractor.extract(text).await?;
+
+// The @context is automatically injected from context.jsonld
+// Prevents issues like:
+// - Wrong URI: "http://schema.org/" instead of "https://schema.org/"
+// - Missing prefixes: No "rdf:", "owl:", etc.
+// - Type coercion errors: Dates not marked as xsd:date
+```
+
+**What's in context.jsonld**:
+- Full Schema.org vocabulary
+- RDF, RDFS, OWL, XSD prefixes
+- FOAF (Friend of a Friend)
+- Dublin Core Terms (dcterms)
+- GeoSPARQL (geo)
+- Time Ontology
+- Proper type coercion for dates, URLs, etc.
+
+### Model Switching
+
+**Problem**: Using expensive models like Claude or GPT-4 for simple entity extraction wastes money and time.
+
+**Solution**: Configure a cheap/fast model for simple tasks and reserve powerful models for complex relation extraction.
+
+```rust
+let config = ExtractionConfig::new()
+    .with_model("claude-3-5-sonnet")        // For complex relation extraction
+    .with_simple_model("llama3.2:3b");      // For simple entity extraction
+
+let extractor = GenAiExtractor::new(config)?;
+```
+
+**Recommended Model Combinations**:
+
+| Use Case | Simple Model | Complex Model | Savings |
+|----------|-------------|---------------|---------|
+| **High Quality** | `llama3.2:3b` (Ollama) | `claude-3-5-sonnet` | 80% cost reduction |
+| **Balanced** | `gpt-4o-mini` | `gpt-4o` | 90% cost reduction |
+| **Budget** | `llama3.2:3b` (local) | `llama3.3:70b` (local) | 100% (free) |
+| **Speed** | `gemini-2.0-flash` | `gemini-1.5-pro` | 95% cost reduction |
+
+**When to use simple model**:
+- Entity type classification (Person, Org, Place)
+- Basic property extraction (name, birthDate)
+- JSON-LD structure validation
+
+**When to use complex model**:
+- Relation extraction (worksFor, foundedBy)
+- Temporal reasoning ("after graduating", "before 1990")
+- Entity disambiguation (Apple Inc. vs. apple fruit)
+
+### PDF Preprocessing with Docling
+
+**Problem**: Standard PDF-to-text tools destroy table structure and lose formatting, making RDF extraction difficult.
+
+**Solution**: Use [Docling](https://github.com/DS4SD/docling) (IBM Research, 2026) for high-quality PDF→Markdown conversion.
+
+**Install Docling**:
+```bash
+pip install docling
+```
+
+**Usage Example**:
+```python
+from docling.document_converter import DocumentConverter
+
+# Convert PDF to Markdown
+converter = DocumentConverter()
+result = converter.convert("paper.pdf")
+
+# Get clean Markdown with preserved tables
+markdown = result.document.export_to_markdown()
+
+# Save for RDF extraction
+with open("paper.md", "w") as f:
+    f.write(markdown)
+```
+
+**Then use in Rust**:
+```rust
+use text_to_rdf::{RdfExtractor, GenAiExtractor, ExtractionConfig};
+use std::fs;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Read Docling-processed Markdown
+    let markdown = fs::read_to_string("paper.md")?;
+
+    let config = ExtractionConfig::from_env()?;
+    let extractor = GenAiExtractor::new(config)?;
+
+    // Extract RDF from clean Markdown
+    let doc = extractor.extract(&markdown).await?;
+
+    println!("{}", doc.to_json()?);
+    Ok(())
+}
+```
+
+**Why Docling over alternatives**:
+- **Table Preservation**: Maintains cell relationships (critical for tabular data)
+- **Formula Support**: Extracts LaTeX formulas correctly
+- **Layout Analysis**: Identifies headers, footers, captions
+- **Open Source**: No API costs, runs locally
+- **Active Development**: IBM Research backing (2024-2026+)
+
+**Alternatives**:
+- **PyMuPDF**: Fast but loses table structure
+- **pdfplumber**: Good for tables but limited layout analysis
+- **Apache Tika**: Java dependency, slower
+- **Unstructured.io**: Commercial API, expensive at scale
 
 ## Examples
 

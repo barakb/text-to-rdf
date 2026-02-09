@@ -1,0 +1,28 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/",
+    "schema": "https://schema.org/",
+    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "owl": "http://www.w3.org/2002/07/owl#",
+    "dcterms": "http://purl.org/dc/terms/",
+    "foaf": "http://xmlns.com/foaf/0.1/",
+    "geo": "http://www.w3.org/2003/01/geo/wgs84_pos#",
+    "time": "http://www.w3.org/2006/time#",
+
+    "@id": {"@type": "@id"},
+    "sameAs": {"@type": "@id"},
+    "url": {"@type": "@id"},
+    "image": {"@type": "@id"},
+    "mainEntityOfPage": {"@type": "@id"},
+
+    "birthDate": {"@type": "xsd:date"},
+    "deathDate": {"@type": "xsd:date"},
+    "datePublished": {"@type": "xsd:date"},
+    "dateCreated": {"@type": "xsd:date"},
+    "dateModified": {"@type": "xsd:date"},
+    "startDate": {"@type": "xsd:date"},
+    "endDate": {"@type": "xsd:date"}
+  }
+}

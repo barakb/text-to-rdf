@@ -6,6 +6,10 @@ use std::collections::HashMap;
 
 use crate::{Error, Result};
 
+/// Hardcoded JSON-LD @context to ensure correct URIs
+/// This prevents LLM hallucinations of incorrect Schema.org URIs
+const HARDCODED_CONTEXT: &str = include_str!("../context.jsonld");
+
 /// Entity types from Schema.org ontology
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EntityType {
@@ -193,6 +197,45 @@ impl RdfDocument {
         if let Some(obj) = self.data.as_object_mut() {
             obj.insert("@id".to_string(), Value::String(uri.into()));
         }
+    }
+
+    /// Inject hardcoded JSON-LD @context to ensure correct URIs
+    ///
+    /// This replaces whatever @context the LLM generated with our hardcoded
+    /// context.jsonld, preventing URI hallucinations and ensuring Schema.org compliance.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the hardcoded context cannot be parsed
+    pub fn inject_hardcoded_context(&mut self) -> Result<()> {
+        let context_value: Value = serde_json::from_str(HARDCODED_CONTEXT)
+            .map_err(|e| Error::Config(format!("Failed to parse hardcoded context: {e}")))?;
+
+        self.context = context_value
+            .get("@context")
+            .ok_or_else(|| Error::Config("Hardcoded context missing @context field".to_string()))?
+            .clone();
+
+        // Update the @context in the data object as well
+        if let Some(obj) = self.data.as_object_mut() {
+            obj.insert("@context".to_string(), self.context.clone());
+        }
+
+        Ok(())
+    }
+
+    /// Create a new RDF document with hardcoded context injection
+    ///
+    /// This is the recommended way to create RDF documents from LLM output,
+    /// as it ensures correct Schema.org URIs regardless of what the LLM generates.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the JSON is invalid or context injection fails
+    pub fn from_json_with_injected_context(json: &str) -> Result<Self> {
+        let mut doc = Self::from_json(json)?;
+        doc.inject_hardcoded_context()?;
+        Ok(doc)
     }
 
     /// Get the entity name

@@ -176,7 +176,15 @@ impl GenAiExtractor {
 
             // Try to parse and validate
             match RdfDocument::from_json(&json_str) {
-                Ok(doc) => {
+                Ok(mut doc) => {
+                    // Inject hardcoded context if enabled
+                    if self.config.inject_hardcoded_context {
+                        if let Err(e) = doc.inject_hardcoded_context() {
+                            last_error = Some(e);
+                            continue;
+                        }
+                    }
+
                     // If strict validation is enabled, validate the document
                     if self.config.strict_validation {
                         if let Err(e) = doc.validate() {
