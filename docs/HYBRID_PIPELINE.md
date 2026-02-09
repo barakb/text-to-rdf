@@ -575,7 +575,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Stage 4: Validation with SHACL
 
-Finally, validate the RDF output against schema rules to ensure production quality.
+Finally, validate the RDF output against schema rules to ensure production quality before committing to the knowledge graph.
 
 ### What is SHACL?
 
@@ -584,51 +584,161 @@ Finally, validate the RDF output against schema rules to ensure production quali
 - **Type checking**: Ensure correct Schema.org types
 - **Cardinality**: Required fields, max occurrences
 - **Data types**: String, integer, date validation
-- **Custom rules**: Business logic constraints
+- **SPARQL ASK queries**: Custom validation logic via Oxigraph
+- **Confidence scoring**: Quantify data quality (0.0-1.0 scale)
 
-### Configuration
+### Enhanced Validation Features
+
+The library provides a comprehensive SHACL-like validation system with:
+
+#### 1. Rule-Based Validation
+Check required properties for Schema.org entity types:
 
 ```rust
-use text_to_rdf::{ShaclValidator, ValidationRule};
+use text_to_rdf::{RdfValidator, ValidationRule};
 
-let mut validator = ShaclValidator::new();
+let mut validator = RdfValidator::with_schema_org_rules();
 
-// Add custom rules
+// Add custom rule
 validator.add_rule(ValidationRule {
-    name: "Person requires name".into(),
-    applies_to: vec!["Person".into()],
-    check: Box::new(|entity| {
-        entity.properties.contains_key("name")
-    }),
-    message: "Person entities must have a 'name' property".into(),
+    name: "event_requires_location".to_string(),
+    description: "An Event must have a location".to_string(),
+    required_properties: vec!["location".to_string()],
+    entity_type: Some("Event".to_string()),
+    sparql_ask: None,
 });
 ```
+
+#### 2. SPARQL ASK Validation (via Oxigraph)
+Run custom SPARQL queries for complex validation:
+
+```rust
+use text_to_rdf::{RdfValidator, ValidationRule, ValidationConfig};
+use oxigraph::store::Store;
+use std::sync::Arc;
+
+// Create Oxigraph store with validation rules
+let store = Arc::new(Store::new()?);
+
+// Enable SPARQL validation
+let config = ValidationConfig {
+    enable_sparql_validation: true,
+    drop_invalid: false,  // Flag low confidence instead of dropping
+    min_confidence: 0.7,
+};
+
+let validator = RdfValidator::with_config(config)
+    .with_store(store);
+
+// Add rule with SPARQL ASK query
+validator.add_rule(ValidationRule {
+    name: "person_has_valid_birth_year".to_string(),
+    description: "Person must have birthDate after 1800".to_string(),
+    required_properties: vec![],
+    entity_type: Some("Person".to_string()),
+    sparql_ask: Some(r#"
+        ASK {
+            ?person a schema:Person .
+            ?person schema:birthDate ?date .
+            FILTER(YEAR(?date) > 1800)
+        }
+    "#.to_string()),
+});
+```
+
+#### 3. Confidence Scoring
+Each validation assigns a confidence score (0.0-1.0):
+
+```rust
+use text_to_rdf::{RdfDocument, RdfValidator};
+
+let doc: RdfDocument = /* extracted RDF */;
+let validator = RdfValidator::with_schema_org_rules();
+
+let result = validator.validate(&doc);
+
+println!("Valid: {}", result.is_valid());
+println!("Confidence: {:.2}", result.confidence());  // 0.0-1.0
+
+for violation in &result.violations {
+    println!("❌ {}: {} (impact: {:.2})",
+             violation.rule,
+             violation.message,
+             violation.confidence_impact);
+}
+```
+
+**Confidence Calculation**:
+- Start with perfect confidence (1.0)
+- Each violation reduces confidence:
+  - Missing required property: -0.2
+  - Invalid date format: -0.05
+  - Invalid URI: -0.1
+  - SPARQL ASK failure: -0.15
+  - Basic structure error: -0.5
 
 ### Usage Example
 
 ```rust
-use text_to_rdf::{RdfDocument, ShaclValidator};
+use text_to_rdf::{RdfDocument, RdfValidator, ValidationConfig};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // RDF document from previous stages
     let rdf_doc: RdfDocument = /* ... */;
 
-    // Validate
-    let validator = ShaclValidator::new();
-    let report = validator.validate(&rdf_doc)?;
+    // Create validator with Schema.org rules
+    let config = ValidationConfig {
+        drop_invalid: false,
+        min_confidence: 0.7,
+        enable_sparql_validation: false,
+    };
 
-    if report.is_valid() {
-        println!("✅ Valid RDF!");
+    let validator = RdfValidator::with_schema_org_rules()
+        .set_config(config);
+
+    // Validate
+    let result = validator.validate(&rdf_doc);
+
+    if result.is_valid() && result.confidence() >= 0.7 {
+        println!("✅ Valid RDF! (Confidence: {:.2})", result.confidence());
     } else {
-        for violation in report.violations {
-            eprintln!("❌ {}: {}", violation.rule_name, violation.message);
+        println!("⚠️  Low confidence RDF (Confidence: {:.2})", result.confidence());
+
+        for error in result.errors() {
+            eprintln!("❌ {}: {}", error.rule, error.message);
+        }
+
+        for warning in result.warnings() {
+            eprintln!("⚠️  {}: {}", warning.rule, warning.message);
         }
     }
 
     Ok(())
 }
 ```
+
+### Drop vs Flag Low Confidence
+
+Configure how to handle validation failures:
+
+```rust
+// Option 1: Flag as low confidence (default)
+let config = ValidationConfig {
+    drop_invalid: false,  // Keep the data, just mark confidence
+    min_confidence: 0.7,
+    ..Default::default()
+};
+
+// Option 2: Drop invalid triples
+let config = ValidationConfig {
+    drop_invalid: true,  // Remove data that fails validation
+    min_confidence: 0.9,  // Stricter threshold
+    ..Default::default()
+};
+```
+
+**Recommendation**: Use `drop_invalid: false` for production to preserve data and let downstream systems decide based on confidence scores.
 
 ## Complete Pipeline Example
 
@@ -681,18 +791,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
              rdf_doc.count_linked_entities());
 
     // STAGE 4: Validation (SHACL)
-    let validator = ShaclValidator::new();
-    let report = validator.validate(&rdf_doc)?;
+    let validator = RdfValidator::with_schema_org_rules();
+    let result = validator.validate(&rdf_doc);
 
-    if !report.is_valid() {
-        eprintln!("Stage 4: Validation errors:");
-        for violation in report.violations {
-            eprintln!("  - {}", violation.message);
+    println!("Stage 4: Validation (Confidence: {:.2})", result.confidence());
+
+    if !result.is_valid() || result.confidence() < 0.7 {
+        eprintln!("Stage 4: Validation warnings:");
+        for violation in &result.violations {
+            eprintln!("  - {}: {}", violation.rule, violation.message);
         }
-        return Err("Validation failed".into());
-    }
 
-    println!("Stage 4: ✅ Validation passed");
+        if !result.is_valid() {
+            return Err("Validation failed".into());
+        }
+    } else {
+        println!("Stage 4: ✅ Validation passed");
+    }
 
     // Output final RDF
     println!("\n{}", rdf_doc.to_turtle()?);

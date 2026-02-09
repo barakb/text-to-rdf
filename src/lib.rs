@@ -45,7 +45,9 @@ pub use entity_linker::{EntityLinker, EntityLinkerConfig, LinkedEntity, LinkingS
 pub use error::{Error, Result};
 pub use extractor::GenAiExtractor;
 pub use types::{EntityType, RdfDocument, RdfEntity};
-pub use validation::{RdfValidator, Severity, ValidationResult, ValidationRule, Violation};
+pub use validation::{
+    RdfValidator, Severity, ValidationConfig, ValidationResult, ValidationRule, Violation,
+};
 
 #[cfg(feature = "gliner")]
 pub use gliner_extractor::{GlinerConfig, GlinerExtractor};

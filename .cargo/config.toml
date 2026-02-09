@@ -10,3 +10,8 @@ rustflags = []
 [env]
 # Required for oxigraph (RocksDB) C++ compilation on macOS
 CXXFLAGS = { value = "-isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk", force = true }
+
+
+[alias]
+# Now you can just run 'cargo lint'
+lint = "clippy --lib -- -W clippy::pedantic -W clippy::nursery -D warnings"

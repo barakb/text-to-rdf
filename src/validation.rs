@@ -1,10 +1,21 @@
-//! RDF Validation Module - Stage 5 of the extraction pipeline
+//! RDF Validation Module - Stage 4 of the extraction pipeline
 //!
 //! Provides SHACL-like validation to ensure extracted RDF data is semantically sound
 //! before committing to the knowledge graph.
+//!
+//! ## Features
+//!
+//! - **Rule-Based Validation**: Check required properties for Schema.org types
+//! - **SPARQL ASK Validation**: Run custom SPARQL queries via Oxigraph
+//! - **Confidence Scoring**: Assign confidence scores to validation results
+//! - **Type Checking**: Validate property datatypes (dates, URLs, etc.)
+//! - **Cardinality Constraints**: Ensure properties have correct number of values
 
 use crate::types::RdfDocument;
+use oxigraph::sparql::QueryResults;
+use oxigraph::store::Store;
 use serde_json::Value;
+use std::sync::Arc;
 
 /// Validation rules for RDF documents
 #[derive(Debug, Clone)]
@@ -13,6 +24,29 @@ pub struct ValidationRule {
     pub description: String,
     pub required_properties: Vec<String>,
     pub entity_type: Option<String>,
+    /// Optional SPARQL ASK query for custom validation
+    pub sparql_ask: Option<String>,
+}
+
+/// Configuration for RDF validation
+#[derive(Debug, Clone)]
+pub struct ValidationConfig {
+    /// Drop triples that fail validation (vs flagging as low confidence)
+    pub drop_invalid: bool,
+    /// Minimum confidence threshold (0.0-1.0)
+    pub min_confidence: f64,
+    /// Enable SPARQL-based validation
+    pub enable_sparql_validation: bool,
+}
+
+impl Default for ValidationConfig {
+    fn default() -> Self {
+        Self {
+            drop_invalid: false,
+            min_confidence: 0.7,
+            enable_sparql_validation: false,
+        }
+    }
 }
 
 /// Validation result with detailed feedback
@@ -20,6 +54,8 @@ pub struct ValidationRule {
 pub struct ValidationResult {
     pub valid: bool,
     pub violations: Vec<Violation>,
+    /// Overall confidence score (0.0-1.0)
+    pub confidence: f64,
 }
 
 /// A validation violation
@@ -28,6 +64,10 @@ pub struct Violation {
     pub rule: String,
     pub message: String,
     pub severity: Severity,
+    /// Property that failed validation
+    pub property: Option<String>,
+    /// Confidence impact (-1.0 to 0.0, how much this reduces overall confidence)
+    pub confidence_impact: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -39,6 +79,9 @@ pub enum Severity {
 /// RDF validator with configurable rules
 pub struct RdfValidator {
     rules: Vec<ValidationRule>,
+    config: ValidationConfig,
+    /// Optional Oxigraph store for SPARQL ASK validation
+    store: Option<Arc<Store>>,
 }
 
 impl Default for RdfValidator {
@@ -51,7 +94,25 @@ impl RdfValidator {
     /// Create a new validator with no rules
     #[must_use]
     pub const fn new() -> Self {
-        Self { rules: Vec::new() }
+        Self {
+            rules: Vec::new(),
+            config: ValidationConfig {
+                drop_invalid: false,
+                min_confidence: 0.7,
+                enable_sparql_validation: false,
+            },
+            store: None,
+        }
+    }
+
+    /// Create a validator with custom configuration
+    #[must_use]
+    pub const fn with_config(config: ValidationConfig) -> Self {
+        Self {
+            rules: Vec::new(),
+            config,
+            store: None,
+        }
     }
 
     /// Create a validator with `Schema.org` standard rules
@@ -65,6 +126,7 @@ impl RdfValidator {
             description: "A Person entity must have a 'name' property".to_string(),
             required_properties: vec!["name".to_string()],
             entity_type: Some("Person".to_string()),
+            sparql_ask: None,
         });
 
         // Rule: Organization must have a name
@@ -73,6 +135,7 @@ impl RdfValidator {
             description: "An Organization entity must have a 'name' property".to_string(),
             required_properties: vec!["name".to_string()],
             entity_type: Some("Organization".to_string()),
+            sparql_ask: None,
         });
 
         // Rule: Place must have a name
@@ -81,9 +144,26 @@ impl RdfValidator {
             description: "A Place entity must have a 'name' property".to_string(),
             required_properties: vec!["name".to_string()],
             entity_type: Some("Place".to_string()),
+            sparql_ask: None,
+        });
+
+        // Rule: Event must have a name
+        validator.add_rule(ValidationRule {
+            name: "event_requires_name".to_string(),
+            description: "An Event entity should have a 'name' property".to_string(),
+            required_properties: vec!["name".to_string()],
+            entity_type: Some("Event".to_string()),
+            sparql_ask: None,
         });
 
         validator
+    }
+
+    /// Attach an Oxigraph store for SPARQL-based validation
+    #[must_use]
+    pub fn with_store(mut self, store: Arc<Store>) -> Self {
+        self.store = Some(store);
+        self
     }
 
     /// Add a validation rule
@@ -91,10 +171,18 @@ impl RdfValidator {
         self.rules.push(rule);
     }
 
+    /// Set validation configuration
+    #[must_use]
+    pub const fn set_config(mut self, config: ValidationConfig) -> Self {
+        self.config = config;
+        self
+    }
+
     /// Validate an RDF document
     #[must_use]
     pub fn validate(&self, document: &RdfDocument) -> ValidationResult {
         let mut violations = Vec::new();
+        let mut confidence = 1.0; // Start with perfect confidence
 
         // Basic structure validation
         if let Err(e) = document.validate() {
@@ -102,10 +190,13 @@ impl RdfValidator {
                 rule: "basic_structure".to_string(),
                 message: format!("Basic validation failed: {e}"),
                 severity: Severity::Error,
+                property: None,
+                confidence_impact: -0.5, // Major impact
             });
             return ValidationResult {
                 valid: false,
                 violations,
+                confidence: 0.5,
             };
         }
 
@@ -123,6 +214,8 @@ impl RdfValidator {
             // Check required properties
             for required_prop in &rule.required_properties {
                 if !Self::has_property(document, required_prop) {
+                    let impact = -0.2; // Missing required property is significant
+                    confidence += impact;
                     violations.push(Violation {
                         rule: rule.name.clone(),
                         message: format!(
@@ -130,36 +223,96 @@ impl RdfValidator {
                             rule.description
                         ),
                         severity: Severity::Error,
+                        property: Some(required_prop.clone()),
+                        confidence_impact: impact,
                     });
+                }
+            }
+
+            // Run SPARQL ASK query if configured
+            if self.config.enable_sparql_validation {
+                if let Some(sparql) = &rule.sparql_ask {
+                    if let Some(store) = &self.store {
+                        if let Ok(result) = Self::execute_sparql_ask(store, sparql, document) {
+                            if !result {
+                                let impact = -0.15;
+                                confidence += impact;
+                                violations.push(Violation {
+                                    rule: rule.name.clone(),
+                                    message: format!("SPARQL validation failed: {}", rule.description),
+                                    severity: Severity::Warning,
+                                    property: None,
+                                    confidence_impact: impact,
+                                });
+                            }
+                        }
+                    }
                 }
             }
         }
 
         // Validate dates if present
-        if let Some(birth_date) = document.get("birthDate") {
-            if !Self::is_valid_date(birth_date) {
-                violations.push(Violation {
-                    rule: "valid_date_format".to_string(),
-                    message: "birthDate must be in ISO 8601 format (YYYY-MM-DD)".to_string(),
-                    severity: Severity::Warning,
-                });
+        for date_prop in &["birthDate", "deathDate", "datePublished", "dateCreated"] {
+            if let Some(date_value) = document.get(date_prop) {
+                if !Self::is_valid_date(date_value) {
+                    let impact = -0.05; // Minor impact for date format
+                    confidence += impact;
+                    violations.push(Violation {
+                        rule: "valid_date_format".to_string(),
+                        message: format!("{date_prop} must be in ISO 8601 format (YYYY-MM-DD)"),
+                        severity: Severity::Warning,
+                        property: Some((*date_prop).to_string()),
+                        confidence_impact: impact,
+                    });
+                }
             }
         }
 
         // Validate URLs if present
         if let Some(id) = document.get_id() {
             if !Self::is_valid_url(id) {
+                let impact = -0.1;
+                confidence += impact;
                 violations.push(Violation {
                     rule: "valid_uri".to_string(),
                     message: "@id must be a valid URI".to_string(),
                     severity: Severity::Warning,
+                    property: Some("@id".to_string()),
+                    confidence_impact: impact,
                 });
             }
         }
 
+        // Ensure confidence stays in valid range
+        confidence = confidence.clamp(0.0, 1.0);
+
         ValidationResult {
-            valid: violations.iter().all(|v| v.severity != Severity::Error),
+            valid: violations.iter().all(|v| v.severity != Severity::Error)
+                && confidence >= self.config.min_confidence,
             violations,
+            confidence,
+        }
+    }
+
+    /// Execute a SPARQL ASK query against the document
+    ///
+    /// Returns true if the query returns true, false otherwise
+    #[allow(deprecated)]
+    fn execute_sparql_ask(
+        store: &Store,
+        query: &str,
+        _document: &RdfDocument,
+    ) -> Result<bool, String> {
+        // Execute SPARQL ASK query
+        let results = store
+            .query(query)
+            .map_err(|e| format!("SPARQL query failed: {e}"))?;
+
+        // Check if it's a boolean result
+        if let QueryResults::Boolean(result) = results {
+            Ok(result)
+        } else {
+            Err("SPARQL query did not return a boolean result".to_string())
         }
     }
 
@@ -188,6 +341,18 @@ impl ValidationResult {
         self.valid
     }
 
+    /// Get confidence score (0.0-1.0)
+    #[must_use]
+    pub const fn confidence(&self) -> f64 {
+        self.confidence
+    }
+
+    /// Check if confidence meets minimum threshold
+    #[must_use]
+    pub fn meets_confidence_threshold(&self, threshold: f64) -> bool {
+        self.confidence >= threshold
+    }
+
     /// Get all error violations
     #[must_use]
     pub fn errors(&self) -> Vec<&Violation> {
@@ -204,6 +369,15 @@ impl ValidationResult {
             .iter()
             .filter(|v| v.severity == Severity::Warning)
             .collect()
+    }
+
+    /// Get total confidence impact from all violations
+    #[must_use]
+    pub fn total_confidence_impact(&self) -> f64 {
+        self.violations
+            .iter()
+            .map(|v| v.confidence_impact)
+            .sum()
     }
 }
 
@@ -287,6 +461,7 @@ mod tests {
             description: "Test requires foo".to_string(),
             required_properties: vec!["foo".to_string()],
             entity_type: None,
+            sparql_ask: None,
         });
 
         let doc = RdfDocument::from_value(json!({

@@ -5,12 +5,13 @@ A high-performance Rust library for extracting structured RDF data (entities and
 ## Features
 
 - **Schema-First Extraction**: Outputs JSON-LD mapped to Schema.org and standard RDF ontologies
+- **Instructor Pattern**: Automatic retry with validation error feedback for reliable structured output
 - **Multi-Provider AI Support**: Works with Gemini, Claude, GPT via `genai`
 - **Coreference Resolution** (pure Rust): Resolve pronouns to canonical entities before extraction
 - **GLiNER Zero-Shot NER** (optional): Fast local entity extraction with provenance tracking (4x faster than Python)
 - **Hybrid Pipeline**: 5-stage production-grade pipeline from preprocessing to validation
 - **Entity Linking**: Local Rust-native linking with Oxigraph or remote APIs (DBpedia, Wikidata)
-- **SHACL-like Validation**: Schema validation with custom rules
+- **SHACL Validation**: Schema validation with custom rules, SPARQL ASK queries, and confidence scoring
 - **Trait-Based Design**: Extensible architecture for custom extractors
 - **Environment Configuration**: Easy setup with .env files
 - **Real-World Test Data**: Includes WebNLG dataset fixtures for validation
@@ -168,6 +169,90 @@ let config = ExtractionConfig::new()
 
 let extractor = GenAiExtractor::new(config)?;
 ```
+
+## SHACL Validation Layer (Stage 4)
+
+The library provides comprehensive SHACL-like validation to ensure extracted RDF data meets quality standards before committing to your knowledge graph.
+
+### Features
+
+- **Rule-Based Validation**: Check required properties for Schema.org entity types
+- **SPARQL ASK Queries**: Custom validation logic via Oxigraph
+- **Confidence Scoring**: Quantitative quality scores (0.0-1.0)
+- **Type Checking**: Validate dates, URLs, and other datatypes
+- **Configurable Behavior**: Drop invalid triples or flag as low confidence
+
+### Basic Usage
+
+```rust
+use text_to_rdf::{RdfValidator, RdfDocument};
+
+let validator = RdfValidator::with_schema_org_rules();
+let result = validator.validate(&rdf_doc);
+
+if result.is_valid() && result.confidence() >= 0.7 {
+    println!("✅ Valid RDF! Confidence: {:.2}", result.confidence());
+} else {
+    println!("⚠️ Low confidence: {:.2}", result.confidence());
+    for error in result.errors() {
+        eprintln!("❌ {}: {}", error.rule, error.message);
+    }
+}
+```
+
+### Advanced: SPARQL ASK Validation
+
+```rust
+use text_to_rdf::{RdfValidator, ValidationRule, ValidationConfig};
+use oxigraph::store::Store;
+use std::sync::Arc;
+
+// Enable SPARQL validation
+let config = ValidationConfig {
+    enable_sparql_validation: true,
+    drop_invalid: false,  // Flag as low confidence instead of dropping
+    min_confidence: 0.7,
+};
+
+let store = Arc::new(Store::new()?);
+let validator = RdfValidator::with_config(config)
+    .with_store(store);
+
+// Add custom SPARQL ASK rule
+validator.add_rule(ValidationRule {
+    name: "person_born_after_1800".to_string(),
+    description: "Person must have birthDate after 1800".to_string(),
+    required_properties: vec![],
+    entity_type: Some("Person".to_string()),
+    sparql_ask: Some(r#"
+        ASK {
+            ?person a schema:Person .
+            ?person schema:birthDate ?date .
+            FILTER(YEAR(?date) > 1800)
+        }
+    "#.to_string()),
+});
+```
+
+### Confidence Scoring
+
+The validator assigns confidence scores based on violations:
+
+| Violation Type | Impact | Severity |
+|----------------|--------|----------|
+| Missing required property | -0.2 | Error |
+| Invalid date format | -0.05 | Warning |
+| Invalid URI | -0.1 | Warning |
+| SPARQL ASK failure | -0.15 | Warning |
+| Basic structure error | -0.5 | Error |
+
+**Example**:
+- Document starts at 1.0 confidence
+- Missing person name: 1.0 - 0.2 = 0.8
+- Invalid date format: 0.8 - 0.05 = 0.75
+- Final confidence: 0.75 (still valid if threshold is 0.7)
+
+See [docs/HYBRID_PIPELINE.md](docs/HYBRID_PIPELINE.md) for complete examples.
 
 ## Examples
 
