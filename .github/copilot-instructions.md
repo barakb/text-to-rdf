@@ -41,11 +41,16 @@ When writing extraction logic, follow this sequence:
 ## 5. Development Workflow
 - **Validation**: Every public function must be documented with `///` and include a `# Errors` section.
 - **Testing**: Include unit tests for extraction logic using small, deterministic text samples.
+- **Warning-Free Compilation**:
+    - **Always** run `cargo fmt --all`, `cargo check` and `cargo lint` and run all the examples, before considering work complete.
+    - Code **must** compile without warnings. Use `#[allow(dead_code)]` only when the field/code is intentionally preserved for data structure completeness or future use.
+    - Never commit code with `unused` warnings.
 - **Commands**:
     - Format: `cargo fmt --all`
     - Build: `cargo build`
     - Test: `cargo test`
-    - Lint: `cargo clippy --lib -- -W clippy::pedantic -W clippy::nursery -D warnings` 
+    - Lint: `cargo clippy --lib -- -W clippy::pedantic -W clippy::nursery -D warnings`
+    - Check examples: `cargo check --examples`
     - Run all integration tests with real LLMs: `cargo test -- --ignored`
     - Run all examples: `cargo run --example <example_name>`
 

@@ -409,6 +409,57 @@ GENAI_API_KEY=your-key cargo run --example programmatic_config
 
 This example shows how to configure the library using the builder pattern without .env files.
 
+### WebNLG Back-Translation Testing
+
+```bash
+# With API key (uses cloud LLM)
+export GENAI_API_KEY=your-key
+cargo run --example webnlg_evaluation
+
+# Or with Ollama (free local LLM)
+ollama serve
+ollama pull llama3.3:8b
+cargo run --example webnlg_evaluation
+```
+
+This example demonstrates **Back-Translation Testing** using the WebNLG dataset:
+- Extracts RDF from natural language text
+- Compares against gold standard triples
+- Calculates precision, recall, and F1 scores
+- Provides detailed comparison reports
+
+**What is WebNLG?**
+The WebNLG dataset is manually curated with 100% accurate triples (no "distant supervision" noise). It contains 15 DBpedia categories including Building, Artist, Astronaut, Airport, etc.
+
+**Example Output**:
+```
+═══════════════════════════════════════════════════════════════
+Test Case: astronaut_birthdate_1
+═══════════════════════════════════════════════════════════════
+Input Text: "Alan Bean was born on the 15th of March 1932."
+
+📊 Metrics:
+  Precision:        100.00% (1/1)
+  Recall:           100.00% (1/1)
+  F1 Score:         100.00%
+
+✓ True Positives (1):
+  (Alan Bean, birthdat, 1932-03-15)
+
+═══════════════════════════════════════════════════════════════
+                  📊 AGGREGATE SUMMARY REPORT
+═══════════════════════════════════════════════════════════════
+
+📈 Overall Performance:
+  Total Test Cases:    4
+  Average Precision:   87.50%
+  Average Recall:      85.00%
+  Average F1 Score:    86.25%
+
+🏆 Quality Assessment:
+  Good! F1 ≥ 75% - Acceptable for most use cases
+```
+
 ## Using Local LLMs with Ollama
 
 For local development and testing without API costs, you can use [Ollama](https://ollama.ai) with local models like Llama 3.3.

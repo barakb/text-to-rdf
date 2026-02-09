@@ -91,7 +91,15 @@ fn split_camel_case(s: &str) -> Vec<String> {
 }
 
 /// Normalize a JSON-LD value by recursively processing all string fields
+///
+/// **Important**: Only normalizes the root entity's name field, not nested entities.
+/// Nested entity names (like organization names in alumniOf) are preserved for
+/// accurate matching against external knowledge bases.
 pub fn normalize_jsonld_value(value: &mut serde_json::Value) {
+    normalize_jsonld_value_impl(value, true);
+}
+
+fn normalize_jsonld_value_impl(value: &mut serde_json::Value, is_root: bool) {
     use serde_json::Value;
 
     match value {
@@ -108,22 +116,25 @@ pub fn normalize_jsonld_value(value: &mut serde_json::Value) {
             }
         }
         Value::Object(map) => {
-            // Normalize the "name" field specifically for entity identification
-            if let Some(Value::String(name)) = map.get_mut("name") {
-                let normalized = normalize_entity_name(name);
-                *name = normalized;
+            // Only normalize the root entity's name field
+            // Preserve nested entity names for external KB matching
+            if is_root {
+                if let Some(Value::String(name)) = map.get_mut("name") {
+                    let normalized = normalize_entity_name(name);
+                    *name = normalized;
+                }
             }
 
-            // Recursively normalize nested objects
+            // Recursively process nested objects (but mark them as non-root)
             for (key, val) in map.iter_mut() {
-                if key != "@context" && key != "@id" && key != "@type" {
-                    normalize_jsonld_value(val);
+                if key != "@context" && key != "@id" && key != "@type" && key != "name" {
+                    normalize_jsonld_value_impl(val, false);
                 }
             }
         }
         Value::Array(arr) => {
             for item in arr.iter_mut() {
-                normalize_jsonld_value(item);
+                normalize_jsonld_value_impl(item, false);
             }
         }
         _ => {}
@@ -203,5 +214,53 @@ mod tests {
         assert_eq!(value["name"], "alan_bean");
         assert_eq!(value["birthDate"], "1932-03-15"); // Dates not normalized
         assert_eq!(value["@context"], "https://schema.org/"); // URLs not normalized
+    }
+
+    #[test]
+    fn test_normalize_jsonld_preserves_nested_names() {
+        use serde_json::json;
+
+        let mut value = json!({
+            "@context": "https://schema.org/",
+            "@type": "Person",
+            "name": "Alan Bean",
+            "alumniOf": {
+                "@type": "EducationalOrganization",
+                "name": "UT Austin"
+            }
+        });
+
+        normalize_jsonld_value(&mut value);
+
+        // Root entity name should be normalized
+        assert_eq!(value["name"], "alan_bean");
+
+        // Nested entity names should be PRESERVED (not normalized)
+        assert_eq!(value["alumniOf"]["name"], "UT Austin");
+    }
+
+    #[test]
+    fn test_normalize_jsonld_location() {
+        use serde_json::json;
+
+        let mut value = json!({
+            "@context": "https://schema.org/",
+            "@type": "Airport",
+            "name": "Aarhus Airport",
+            "location": {
+                "@type": "Place",
+                "name": "Aarhus",
+                "addressCountry": "Denmark"
+            }
+        });
+
+        normalize_jsonld_value(&mut value);
+
+        // Root entity name normalized
+        assert_eq!(value["name"], "aarhus_airport");
+
+        // Nested location name preserved
+        assert_eq!(value["location"]["name"], "Aarhus");
+        assert_eq!(value["location"]["addressCountry"], "Denmark");
     }
 }
