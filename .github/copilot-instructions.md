@@ -17,6 +17,7 @@ This is a high-performance Rust library designed to extract structured RDF data 
 - **Traits over Types**: Prefer defining traits for "Extractors" and "Resolvers" to allow for future extensibility.
 - **Performance**: Prioritize zero-copy parsing where possible. Use `Cow<'a, str>` or `&str` for transient text data.
 - **Building**: Ensure all code compile without warnings. Use `cargo clippy` in pedantic mode to enforce linting rules.
+- **Documentation**: All public items must have comprehensive documentation. Include examples in docstrings where relevant, documentation should be always up to date, and should include system architecute and all pipelines diagrams.
 
 ## 4. AI & RDF Logic (The "Brain")
 - **Gen-AI Usage**: Use `genai::Client` and `ChatRequest`. Always assume the model is "Smart" (e.g., Claude 3.5/4.5 or GPT-4o) and capable of JSON-LD output.

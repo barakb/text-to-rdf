@@ -39,12 +39,16 @@ pub mod types;
 pub mod normalize;
 pub mod entity_linker;
 pub mod validation;
+pub mod gliner_extractor;
 
 pub use error::{Error, Result};
 pub use extractor::GenAiExtractor;
 pub use types::{RdfDocument, RdfEntity, EntityType};
 pub use entity_linker::{EntityLinker, EntityLinkerConfig, LinkedEntity, LinkingStrategy};
 pub use validation::{RdfValidator, ValidationResult, ValidationRule, Violation, Severity};
+
+#[cfg(feature = "gliner")]
+pub use gliner_extractor::{GlinerExtractor, GlinerConfig};
 
 /// Initialize the library by loading .env file
 ///
