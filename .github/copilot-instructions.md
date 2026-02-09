@@ -1,44 +1,60 @@
 # Project: RDF Extraction Engine (Rust Library)
 
-## 1. Project Overview & Goal
-This is a high-performance Rust library designed to extract structured RDF data (entities and relations) from unstructured text and PDF documents. 
-- **Core Goal**: Transform raw input into valid RDF triples/quads mapped to standard ontologies (Schema.org, GeoSPARQL, etc.).
-- **Method**: Leveraging LLMs via the `genai` crate for Schema-First Extraction.
+---
+description: Unified instructions for text-to-rdf extraction engine
+globs: ["**/*.rs", "**/Cargo.toml", "context.jsonld"]
+alwaysApply: true
+---
 
-## 2. Tech Stack & Architecture
-- **Language**: Rust (Latest stable edition).
-- **Crate Focus**: `genai` for multi-provider AI orchestration (Gemini, Claude, GPT).
-- **Format**: Library crate (`lib.rs`). Do not generate `main.rs` unless specifically asked for an example.
-- **Async Runtime**: `tokio`.
+# Project: text-to-rdf (High-Fidelity Semantic Engine)
 
-## 3. Coding Standards (Rust)
-- **Error Handling**: Use `thiserror` for library-level error variants and `anyhow` only in internal helpers or tests. Always return `Result<T, E>`.
-- **Public API**: Use the `pub` keyword judiciously. Document all public items with `///` docstrings including a `# Errors` section where applicable.
-- **Traits over Types**: Prefer defining traits for "Extractors" and "Resolvers" to allow for future extensibility.
-- **Performance**: Prioritize zero-copy parsing where possible. Use `Cow<'a, str>` or `&str` for transient text data.
-- **Building**: Ensure all code compile without warnings. Use `cargo clippy` in pedantic mode to enforce linting rules.
-- **Documentation**: All public items must have comprehensive documentation. Include examples in docstrings where relevant, documentation should be always up to date, and should include system architecute and all pipelines diagrams.
+## 1. Core Mission & Strategy
+The goal is to extract structured RDF from text/PDFs using a **Local-First, Hybrid Pipeline**. We avoid brittle public APIs (like DBpedia Spotlight) in favor of deterministic local logic and high-reasoning LLMs.
+Using only Rust code.
 
-## 4. AI & RDF Logic (The "Brain")
-- **Gen-AI Usage**: Use `genai::Client` and `ChatRequest`. Always assume the model is "Smart" (e.g., Claude 3.5/4.5 or GPT-4o) and capable of JSON-LD output.
-- **Schema-First Extraction**:
-    - Always prompt the AI to return data in **JSON-LD** format.
-    - Explicitly map extracted fields to **Schema.org** (`schema:`) and **RDF** (`rdf:`) namespaces.
-- **Entity Resolution**: When merging new nodes, prioritize creating `owl:sameAs` relationships rather than over-writing existing nodes.
+## 2. The Hybrid Extraction Pipeline
+When writing extraction logic, follow this sequence:
+1. **Discovery (GLiNER)**: Use Zero-Shot NER (`gline-rs`) to find entity spans. This is faster and more precise than LLM-only discovery.
+2. **URI Linking (Local Index)**: 
+   - Perform lookups in a local `oxigraph` store containing common Wikidata QIDs.
+   - Use fuzzy matching (e.g., Levenshtein) for label alignment.
+3. **Relation Extraction (genai)**: Use the `genai` crate to determine the predicates between discovered URIs.
+4. **Validation**: Use **SHACL-like logic** or SPARQL `ASK` queries via Oxigraph to ensure output validity before finalizing the graph.
 
-## 5. Domain Knowledge (Ontology)
-- **Namespaces**:
-    - `schema`: http://schema.org/
-    - `rdf`: http://www.w3.org/1999/02/22-rdf-syntax-ns#
-    - `geo`: http://www.opengis.net/ont/geosparql#
-- **Standard Types**: Use `schema:Person`, `schema:Organization`, `schema:Place`, and `schema:Event` as the default classes.
+## 3. Rust Implementation Rules
+- **Error Handling**: Implement `thiserror` for library-level error variants. Methods should return `Result<T, E>`.
+- **Async Execution**: Use `tokio` for all LLM and I/O tasks. 
+- **Efficiency**: 
+    - Use `Cow<'a, str>` or `Arc<str>` for entity labels to minimize cloning.
+    - Leverage `SmallVec` for triple collections when the count is likely < 8.
+- **Graph Safety**: Use the `oxigraph` crate to build and manipulate the graph. **Never** use raw string concatenation to generate Turtle/N-Triples.
 
-## 6. Prompting Guidelines for Copilot
+## 4. LLM & RDF Logic
+- **Structured Output**: Force the LLM to return **JSON-LD**. 
+- **Context Management**: Inject the project's `@context` (referencing `context.jsonld`) programmatically in Rust. Do not rely on the LLM to generate the `@context` block.
+- **Ontology Mappings**:
+    - Default to **Schema.org** for core entities (`Person`, `Organization`, `Place`).
+    - Use **GeoSPARQL** for spatial data (`geo:asWKT`).
+    - Use `owl:sameAs` to link internal entity nodes to Wikidata URIs.
+
+## 5. Development Workflow
+- **Validation**: Every public function must be documented with `///` and include a `# Errors` section.
+- **Testing**: Include unit tests for extraction logic using small, deterministic text samples.
+- **Commands**:
+    - Build: `cargo build`
+    - Test: `cargo test`
+    - Lint: `cargo clippy -- -D warnings` 
+    - Run all integration tests with real LLMs: `cargo test -- --ignored`
+    - Run all examples: `cargo run --example <example_name>`
+
+## 6. Prohibited Patterns
+- ❌ Do not use external REST APIs for entity linking (e.g., public DBpedia Spotlight).
+- ❌ Do not use `openai` or `anthropic` crates directly; use the `genai` abstraction.
+- ❌ Do not write `fn main()` in library files; keep it in `examples/` or `tests/`.
+
+
+
+## 7. Prompting Guidelines for Copilot
 - **Avoid Hallucinations**: If a library or crate doesn't exist (check `genai` docs), do not invent functions. 
 - **Context Awareness**: Before generating a new extractor, check if there is an existing `Trait` in the codebase to implement.
-- **PDF Handling**: Assume PDF text extraction is handled by a separate module (e.g., `pdf-extract`). Focus the AI on the *interpretation* of that text.
-
-## 7. Build & Test Commands
-- **Check**: `cargo check`
-- **Test**: `cargo test`
-- **Lint**: `cargo clippy -- -D warnings`
+- **Document**: Keekp all documents always up to date.

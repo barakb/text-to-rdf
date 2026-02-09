@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the **gold standard** approach for RDF extraction in 2026, combining the strengths of local NER models, LLMs, and knowledge bases for maximum accuracy, speed, and reliability.
+This document describes the **gold standard** approach for RDF extraction in 2026, combining the strengths of coreference resolution, local NER models, LLMs, and knowledge bases for maximum accuracy, speed, and reliability.
 
 ## Pipeline Architecture
 
@@ -11,7 +11,22 @@ This document describes the **gold standard** approach for RDF extraction in 202
 │                      HYBRID RDF EXTRACTION PIPELINE                      │
 └─────────────────────────────────────────────────────────────────────────┘
 
-Input Text
+Input Text (with pronouns, references)
+    │
+    ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│ Stage 0: PREPROCESSING - Coreference Resolution                      │
+│ ────────────────────────────────────────────────────────────────     │
+│ • Resolves pronouns to canonical entities                            │
+│ • Pure Rust implementation (~1ms per document)                       │
+│ • Rule-based or GLiNER-guided strategies                             │
+│ • Critical for multi-paragraph documents                             │
+│                                                                       │
+│ Input:  "Dan Shalev founded Acme. He served as CEO."                │
+│ Output: "Dan Shalev founded Acme. Dan Shalev served as CEO."        │
+│                                                                       │
+│ 📖 See: Coreference Resolution Guide                                 │
+└──────────────────────────────────────────────────────────────────────┘
     │
     ▼
 ┌──────────────────────────────────────────────────────────────────────┐
@@ -24,7 +39,7 @@ Input Text
 │ • No hallucinations (only extracts what's present)                   │
 │                                                                       │
 │ Output: Entities with exact text positions                           │
-│         ["James Bond" (0-10, Person), "London" (25-31, Place)]       │
+│         ["Dan Shalev" (0-10, Person), "Acme" (25-31, Org)]          │
 └──────────────────────────────────────────────────────────────────────┘
     │
     ▼
@@ -37,7 +52,7 @@ Input Text
 │ • Handles temporal, causal, and nested relations                     │
 │ • Uses discovered entities as anchors                                │
 │                                                                       │
-│ Input: Text + Entity hints from Stage 1                              │
+│ Input: Resolved text + Entity hints from Stage 1                     │
 │ Output: Rich RDF graph with Schema.org relations                     │
 └──────────────────────────────────────────────────────────────────────┘
     │

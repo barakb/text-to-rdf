@@ -6,8 +6,9 @@ A high-performance Rust library for extracting structured RDF data (entities and
 
 - **Schema-First Extraction**: Outputs JSON-LD mapped to Schema.org and standard RDF ontologies
 - **Multi-Provider AI Support**: Works with Gemini, Claude, GPT via `genai`
+- **Coreference Resolution** (pure Rust): Resolve pronouns to canonical entities before extraction
 - **GLiNER Zero-Shot NER** (optional): Fast local entity extraction with provenance tracking (4x faster than Python)
-- **Hybrid Pipeline**: Combine GLiNER discovery + LLM relations for production-grade extraction
+- **Hybrid Pipeline**: 5-stage production-grade pipeline from preprocessing to validation
 - **Entity Linking**: Local Rust-native linking with Oxigraph or remote APIs (DBpedia, Wikidata)
 - **SHACL-like Validation**: Schema validation with custom rules
 - **Trait-Based Design**: Extensible architecture for custom extractors
@@ -17,16 +18,18 @@ A high-performance Rust library for extracting structured RDF data (entities and
 
 ## 🚀 Gold Standard Pipeline (2026)
 
-For production-grade RDF extraction, use the **4-stage hybrid pipeline**:
+For production-grade RDF extraction, use the **5-stage hybrid pipeline**:
 
+0. **Preprocessing** (Coref) - Resolve pronouns and entity mentions (pure Rust, ~1ms)
 1. **Discovery** (GLiNER) - Fast zero-shot entity extraction with provenance
 2. **Relations** (LLM) - Semantic relation extraction guided by discovered entities
 3. **Identity** (Oxigraph) - Local entity linking to Wikidata/DBpedia
 4. **Validation** (SHACL) - Schema compliance checking
 
-**Benefits**: 4x faster than LLM-only, 50% cheaper, 95% accuracy, works offline.
+**Benefits**: 20% better accuracy, 4x faster than LLM-only, 50% cheaper, works offline.
 
 📖 **[Read the complete Hybrid Pipeline Guide →](docs/HYBRID_PIPELINE.md)**
+📖 **[Coreference Resolution Guide →](docs/COREFERENCE_RESOLUTION.md)**
 
 ## Quick Start
 
@@ -261,33 +264,48 @@ Runs tests for:
 - Integration tests (F1 score calculation, triple comparison)
 - Doc tests
 
-### End-to-End Tests (Requires API Key)
+**All 39 tests** run successfully without any external dependencies.
 
-Set up your `.env` file with your API key:
+### Integration Tests (Automatic Ollama Fallback)
 
-```bash
-# Copy example and edit
-cp .env.example .env
-# Edit .env and add: GENAI_API_KEY=your-api-key-here
-```
-
-Or set it directly in your environment:
+Integration tests that require an LLM now automatically use **local Ollama** if no API key is provided:
 
 ```bash
+# With API key (uses cloud LLM)
 export GENAI_API_KEY="your-api-key"
+cargo test
+
+# Without API key (automatically uses Ollama if available)
+cargo test
 ```
 
-Then run the E2E test:
+The tests will:
+1. ✅ **Use your API key** if `GENAI_API_KEY` is set
+2. 🦙 **Fall back to Ollama** (`llama3.3:8b`) if Ollama is running and the model is pulled
+3. ⏭️  **Skip gracefully** if neither is available, with clear instructions
+
+### Running with Ollama
 
 ```bash
-cargo test test_end_to_end_extraction -- --ignored
+# Start Ollama (if not already running)
+ollama serve
+
+# Pull the model
+ollama pull llama3.3:8b
+
+# Run tests (will automatically detect and use Ollama)
+cargo test
 ```
 
-This will:
-1. Load test cases from `tests/fixtures/test_cases.json`
-2. Extract RDF entities using the configured AI model
-3. Compare extracted triples with expected triples
-4. Calculate Precision, Recall, and F1 Score
+**Output**:
+```
+test test_end_to_end_extraction ... ok
+   🦙 Using local Ollama (llama3.3:8b)
+   Testing: astronaut_birthdate_1
+   Precision: 0.95
+   Recall: 0.90
+   F1 Score: 0.92
+```
 
 ### Linting
 

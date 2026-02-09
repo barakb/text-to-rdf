@@ -27,5 +27,9 @@ num_cpus = { version = "1.16", optional = true }
 default = []
 gliner = ["gline-rs", "orp", "num_cpus"]
 
+[lints.clippy]
+pedantic = "warn"
+
 [dev-dependencies]
 anyhow = "1"
+ureq = "2.10"

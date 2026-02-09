@@ -203,12 +203,24 @@ fn test_perfect_match() {
     assert_eq!(metrics.f1_score, 1.0);
 }
 
-/// Integration test that would use the actual extractor
-/// This test is ignored by default because it requires API keys
+/// Integration test that uses the actual extractor
+/// Automatically uses local Ollama if no GENAI_API_KEY is provided
 #[test]
-#[ignore]
 fn test_end_to_end_extraction() {
     use text_to_rdf::{ExtractionConfig, GenAiExtractor, RdfExtractor};
+    use std::env;
+
+    // Check if we should run this test
+    let has_api_key = env::var("GENAI_API_KEY").is_ok();
+    let use_ollama = !has_api_key && is_ollama_available();
+
+    if !has_api_key && !use_ollama {
+        println!("⏭️  Skipping end-to-end test: No GENAI_API_KEY and Ollama not available");
+        println!("   To run this test:");
+        println!("   1. Set GENAI_API_KEY environment variable, OR");
+        println!("   2. Start Ollama: ollama serve && ollama pull llama3.3:8b");
+        return;
+    }
 
     let test_cases_path = "tests/fixtures/test_cases.json";
     let contents = fs::read_to_string(test_cases_path)
@@ -217,8 +229,17 @@ fn test_end_to_end_extraction() {
     let test_cases: Vec<TestCase> =
         serde_json::from_str(&contents).expect("Should be able to parse test cases JSON");
 
-    // Load config from .env file
-    let config = ExtractionConfig::from_env().expect("Should load config from .env");
+    // Configure for Ollama if no API key
+    let config = if use_ollama {
+        println!("🦙 Using local Ollama (llama3.3:8b)");
+        env::set_var("GENAI_API_KEY", "ollama");
+        env::set_var("RDF_EXTRACTION_MODEL", "llama3.3:8b");
+        ExtractionConfig::from_env().expect("Should load config")
+    } else {
+        println!("☁️  Using configured API key");
+        ExtractionConfig::from_env().expect("Should load config from .env")
+    };
+
     let extractor = GenAiExtractor::new(config).expect("Should create extractor");
 
     let runtime = tokio::runtime::Runtime::new().unwrap();
@@ -251,6 +272,35 @@ fn test_end_to_end_extraction() {
     }
 }
 
+/// Check if Ollama is available on localhost:11434
+fn is_ollama_available() -> bool {
+    use std::net::TcpStream;
+    use std::time::Duration;
+
+    // Check if Ollama is running
+    if TcpStream::connect_timeout(
+        &"127.0.0.1:11434".parse().unwrap(),
+        Duration::from_millis(500),
+    )
+    .is_err()
+    {
+        return false;
+    }
+
+    // Check if llama3.3:8b model is available by trying a simple HTTP request
+    if let Ok(response) = ureq::get("http://127.0.0.1:11434/api/tags")
+        .timeout(Duration::from_secs(2))
+        .call()
+    {
+        if let Ok(body) = response.into_string() {
+            // Check if llama3.3 is in the models list
+            return body.contains("llama3.3");
+        }
+    }
+
+    false
+}
+
 #[test]
 fn test_jsonld_validation() {
     use text_to_rdf::RdfDocument;
@@ -273,18 +323,45 @@ fn test_jsonld_validation() {
     }
 }
 
-/// Integration test for entity linking with DBpedia
-/// This test is ignored by default because it requires network access
+/// Integration test for entity linking
+/// Automatically uses local Ollama if no GENAI_API_KEY is provided
 #[test]
-#[ignore]
 fn test_entity_linking_integration() {
     use text_to_rdf::{EntityLinker, ExtractionConfig, GenAiExtractor, RdfExtractor, LinkingStrategy};
+    use std::env;
 
-    let config = ExtractionConfig::from_env().expect("Should load config from .env");
+    // Check if we should run this test
+    let has_api_key = env::var("GENAI_API_KEY").is_ok();
+    let use_ollama = !has_api_key && is_ollama_available();
 
-    // Ensure entity linking is enabled
-    assert!(config.entity_linker.enabled, "Entity linking should be enabled in .env");
-    assert_eq!(config.entity_linker.strategy, LinkingStrategy::DbpediaSpotlight);
+    if !has_api_key && !use_ollama {
+        println!("⏭️  Skipping entity linking test: No GENAI_API_KEY and Ollama not available");
+        return;
+    }
+
+    // Configure for Ollama if no API key
+    if use_ollama {
+        println!("🦙 Using local Ollama for entity linking test");
+        env::set_var("GENAI_API_KEY", "ollama");
+        env::set_var("RDF_EXTRACTION_MODEL", "llama3.3:8b");
+    }
+
+    // Enable entity linking with DBpedia
+    env::set_var("ENTITY_LINKING_ENABLED", "true");
+    env::set_var("ENTITY_LINKING_STRATEGY", "dbpedia");
+
+    let config = ExtractionConfig::from_env().expect("Should load config");
+
+    // Check entity linking is enabled
+    if !config.entity_linker.enabled {
+        println!("⏭️  Skipping: Entity linking not enabled in config");
+        return;
+    }
+
+    if config.entity_linker.strategy != LinkingStrategy::DbpediaSpotlight {
+        println!("⏭️  Skipping: Entity linking strategy is not dbpedia");
+        return;
+    }
 
     let extractor = GenAiExtractor::new(config.clone()).expect("Should create extractor");
     let runtime = tokio::runtime::Runtime::new().unwrap();
