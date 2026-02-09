@@ -105,15 +105,10 @@ impl RdfExtractor for GenAiExtractor {
             .await
             .map_err(|e| Error::AiService(e.to_string()))?;
 
-        // Get the response content
-        let content = response
-            .content
-            .as_ref()
+        // Get the response content text using the new genai 0.5 API
+        let content_text = response
+            .first_text()
             .ok_or_else(|| Error::AiService("Empty response from AI service".to_string()))?;
-
-        let content_text = content
-            .text_as_str()
-            .ok_or_else(|| Error::AiService("Response is not text".to_string()))?;
 
         // Extract JSON from the response
         let json_str = Self::extract_json_from_response(content_text);

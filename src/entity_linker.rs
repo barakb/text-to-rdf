@@ -303,6 +303,9 @@ impl EntityLinker {
     }
 
     /// Execute SPARQL query and calculate confidence scores
+    ///
+    /// TODO: Update to use SparqlEvaluator interface when oxigraph 0.5 API is fully documented
+    #[allow(deprecated)]
     fn execute_candidate_query(
         &self,
         store: &Store,
@@ -449,8 +452,8 @@ Your response (just the number):"#,
             .await
             .map_err(|e| Error::Network(format!("LLM disambiguation failed: {}", e)))?;
 
-        // Parse LLM response
-        let response_text = response.content_text_as_str().unwrap_or("");
+        // Parse LLM response using genai 0.5 API
+        let response_text = response.first_text().unwrap_or("");
         let selected_idx: usize = response_text
             .trim()
             .parse()
@@ -607,9 +610,14 @@ mod tests {
             .link_entity("Alan Bean was an astronaut", "Alan Bean", Some("Person"))
             .await;
 
-        assert!(result.is_ok());
+        // Print error if it fails
+        if let Err(ref e) = result {
+            eprintln!("DBpedia linking error: {}", e);
+        }
+
+        assert!(result.is_ok(), "DBpedia API call failed");
         let link_result = result.unwrap();
-        assert!(link_result.is_some());
+        assert!(link_result.is_some(), "No entity found");
 
         let entity = link_result.unwrap();
         assert!(entity.uri.contains("dbpedia.org"));

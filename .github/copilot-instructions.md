@@ -28,6 +28,7 @@ When writing extraction logic, follow this sequence:
     - Use `Cow<'a, str>` or `Arc<str>` for entity labels to minimize cloning.
     - Leverage `SmallVec` for triple collections when the count is likely < 8.
 - **Graph Safety**: Use the `oxigraph` crate to build and manipulate the graph. **Never** use raw string concatenation to generate Turtle/N-Triples.
+- **Dependency Management**: Only use crates that are actively maintained and have no known security issues. Avoid large, monolithic frameworks, try to use latest stable version of each dependency.
 
 ## 4. LLM & RDF Logic
 - **Structured Output**: Force the LLM to return **JSON-LD**. 
@@ -43,7 +44,7 @@ When writing extraction logic, follow this sequence:
 - **Commands**:
     - Build: `cargo build`
     - Test: `cargo test`
-    - Lint: `cargo clippy -- -D warnings` 
+    - Lint: `cargo clippy --lib -- -W clippy::pedantic -W clippy::nursery -D warnings` 
     - Run all integration tests with real LLMs: `cargo test -- --ignored`
     - Run all examples: `cargo run --example <example_name>`
 
