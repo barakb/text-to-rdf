@@ -51,6 +51,7 @@ Input Text (with pronouns, references)
 │ • Maps to Schema.org types                                           │
 │ • Handles temporal, causal, and nested relations                     │
 │ • Uses discovered entities as anchors                                │
+│ • Instructor Pattern: Retry with validation error feedback          │
 │                                                                       │
 │ Input: Resolved text + Entity hints from Stage 1                     │
 │ Output: Rich RDF graph with Schema.org relations                     │
@@ -303,6 +304,59 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 - ✅ Maps to Schema.org ontology
 - ✅ Guided by GLiNER's entity hints (reduces hallucinations)
 - ✅ Preserves entity IDs from Stage 1
+
+### Instructor Pattern: Structured Output with Retry Logic
+
+Stage 2 implements the **Instructor pattern** to ensure the LLM always returns valid, structured JSON-LD output.
+
+#### How It Works
+
+1. **Attempt Extraction** - LLM generates JSON-LD from text
+2. **Validate Structure** - Check conformance to Schema.org and RDF requirements
+3. **Error Feedback Loop** - If validation fails, send detailed error message back to LLM
+4. **Retry with Corrections** - LLM corrects output based on specific validation errors
+5. **Return Valid RDF** - Process repeats up to `max_retries` times until valid
+
+#### Example: Automatic Error Correction
+
+```
+Attempt 1:
+Input: "Alan Bean was an astronaut born in 1932"
+LLM Output: {
+  "type": "Person",
+  "name": "Alan Bean"
+}
+❌ Validation Error: Missing @context field
+
+Attempt 2 (with detailed feedback):
+Error Sent to LLM: "Schema Validation Error: Missing @context
+                    Please ensure:
+                    - @context is set to 'https://schema.org/'
+                    - @type is present (not just 'type')
+                    - All required properties are included"
+
+LLM Output: {
+  "@context": "https://schema.org/",
+  "@type": "Person",
+  "name": "Alan Bean",
+  "birthDate": "1932"
+}
+✅ Success!
+```
+
+#### Configuration
+
+```rust
+let config = ExtractionConfig::new()
+    .with_max_retries(3)              // Try up to 3 times (default: 2)
+    .with_strict_validation(true);    // Enforce validation (default: true)
+```
+
+**Benefits of Instructor Pattern**:
+- **Higher Accuracy**: Validation errors guide LLM to correct structure
+- **Deterministic**: Always returns valid JSON-LD or explicit failure
+- **Cost Efficient**: Only retries on validation failure, not API errors
+- **Detailed Errors**: Shows exactly what field is missing or malformed
 
 ## Stage 3: Identity Resolution with Oxigraph
 

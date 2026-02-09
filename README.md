@@ -69,6 +69,47 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+## Instructor Pattern: Structured Extraction with Retry Logic
+
+The library implements the **Instructor pattern** for reliable structured output from LLMs. This ensures that extracted RDF data always conforms to the expected JSON-LD schema.
+
+### How It Works
+
+1. **Attempt Extraction** - LLM extracts entities from text as JSON-LD
+2. **Validate Structure** - Check if output conforms to Schema.org and RDF requirements
+3. **Send Error Feedback** - If validation fails, send detailed error message back to LLM
+4. **Retry with Context** - LLM corrects the output based on specific error feedback
+5. **Return Valid Data** - Process repeats up to `max_retries` times until valid
+
+### Example Flow
+
+```
+Attempt 1:
+Input: "Albert Einstein was born in Ulm"
+LLM Output: { "type": "Person", "name": "Einstein" }
+Validation Error: Missing @context field
+
+Attempt 2 (with feedback):
+Error Message: "Schema Validation Error: Missing @context.
+               Please ensure @context is set to 'https://schema.org/'"
+LLM Output: { "@context": "https://schema.org/", "@type": "Person", "name": "Albert Einstein" }
+Success ✓
+```
+
+### Configuration
+
+```rust
+let config = ExtractionConfig::new()
+    .with_max_retries(3)              // Try up to 3 times (default: 2)
+    .with_strict_validation(true);    // Enforce validation (default: true)
+```
+
+**Benefits**:
+- **Higher Accuracy**: Validation errors guide the LLM to correct outputs
+- **Deterministic Output**: Always returns valid JSON-LD or fails explicitly
+- **Cost Efficient**: Only retries on validation failure, not API errors
+- **Debugging**: Detailed error messages show what went wrong
+
 ## Configuration Options
 
 ### Environment Variables
@@ -83,6 +124,8 @@ Create a `.env` file in your project root with these variables:
 | `GENAI_MAX_TOKENS` | No | `4096` | Maximum tokens in response |
 | `GENAI_SYSTEM_PROMPT` | No | (built-in) | Custom system prompt override |
 | `RDF_ONTOLOGIES` | No | `https://schema.org/` | Comma-separated ontology URLs |
+| `RDF_EXTRACTION_MAX_RETRIES` | No | `2` | Max retry attempts for failed extractions |
+| `RDF_EXTRACTION_STRICT_VALIDATION` | No | `true` | Enable strict schema validation with error feedback |
 | `ENTITY_LINKING_ENABLED` | No | `false` | Enable entity linking |
 | `ENTITY_LINKING_STRATEGY` | No | `none` | Strategy: `local`, `dbpedia`, `wikidata`, or `none` |
 | `ENTITY_LINKING_KB_PATH` | No | - | Path to local RDF knowledge base (for `local` strategy) |

@@ -19,6 +19,7 @@ IMPORTANT INSTRUCTIONS:
 7. For nested entities (like birthPlace), include full entity structure with @type
 8. Extract dates in ISO 8601 format when possible
 9. Do not add commentary or explanations, only return the JSON-LD
+10. If extraction fails validation, you will receive the specific errors and must correct them
 
 Example output format:
 {
@@ -60,16 +61,6 @@ impl GenAiExtractor {
             .unwrap_or(DEFAULT_SYSTEM_PROMPT)
     }
 
-    /// Build a chat request for extraction
-    fn build_request(&self, text: &str) -> ChatRequest {
-        let system_msg = ChatMessage::system(self.get_system_prompt());
-        let user_msg = ChatMessage::user(format!(
-            "Extract RDF entities and relations from the following text. Return only valid JSON-LD:\n\n{text}"
-        ));
-
-        ChatRequest::new(vec![system_msg, user_msg])
-    }
-
     /// Extract the JSON-LD content from the AI response
     fn extract_json_from_response(response: &str) -> String {
         // Try to find JSON content between code fences
@@ -91,30 +82,130 @@ impl GenAiExtractor {
         // If no JSON found, return the whole response and let JSON parser handle it
         response.trim().to_string()
     }
+
+    /// Generate a detailed validation error message for LLM feedback
+    ///
+    /// This creates a human-readable error message explaining what went wrong
+    /// with the extraction, which can be sent back to the LLM for correction.
+    fn generate_validation_error_message(error: &Error) -> String {
+        match error {
+            Error::JsonParse(e) => format!(
+                "JSON Parsing Error: {e}\n\nPlease ensure:\n\
+                - Valid JSON syntax (proper quotes, commas, brackets)\n\
+                - No trailing commas\n\
+                - Escaped special characters in strings"
+            ),
+            Error::Validation(msg) => format!(
+                "Schema Validation Error: {msg}\n\nPlease ensure:\n\
+                - @context is set to \"https://schema.org/\"\n\
+                - @type is present and valid (Person, Organization, Place, Event, etc.)\n\
+                - All required properties for the entity type are included\n\
+                - Property names match Schema.org vocabulary"
+            ),
+            Error::InvalidRdf(msg) => format!(
+                "RDF Structure Error: {msg}\n\nPlease ensure:\n\
+                - The document follows JSON-LD structure\n\
+                - All required RDF properties are present\n\
+                - Nested entities have proper @type annotations"
+            ),
+            Error::MissingField(field) => format!(
+                "Missing Required Field: {field}\n\nPlease ensure:\n\
+                - All required Schema.org properties are present\n\
+                - Field names are spelled correctly\n\
+                - Values are not null or empty"
+            ),
+            _ => format!("Extraction Error: {error}\n\nPlease try again with valid JSON-LD."),
+        }
+    }
+
+    /// Extract with retry logic and error feedback (Instructor pattern)
+    ///
+    /// This implements the Instructor pattern by:
+    /// 1. Attempting extraction
+    /// 2. Validating the result
+    /// 3. If validation fails, sending the error back to the LLM as feedback
+    /// 4. Retrying up to `max_retries` times
+    async fn extract_with_retry(&self, text: &str) -> Result<RdfDocument> {
+        let mut last_error = None;
+        let mut conversation_history = Vec::new();
+
+        // Initial system message
+        conversation_history.push(ChatMessage::system(self.get_system_prompt()));
+
+        for attempt in 0..=self.config.max_retries {
+            // Build the user message for this attempt
+            let user_message = if attempt == 0 {
+                // First attempt: just the extraction request
+                format!(
+                    "Extract RDF entities and relations from the following text. \
+                    Return only valid JSON-LD:\n\n{text}"
+                )
+            } else {
+                // Retry attempt: include the error feedback
+                let error_msg = last_error.as_ref().map_or_else(
+                    || "Unknown error".to_string(),
+                    Self::generate_validation_error_message,
+                );
+
+                format!(
+                    "The previous extraction failed with the following error:\n\n{error_msg}\n\n\
+                    Please correct the JSON-LD and extract again from this text:\n\n{text}"
+                )
+            };
+
+            conversation_history.push(ChatMessage::user(user_message));
+
+            // Execute the chat request with conversation history
+            let request = ChatRequest::new(conversation_history.clone());
+            let response = self
+                .client
+                .exec_chat(&self.config.model, request, None)
+                .await
+                .map_err(|e| Error::AiService(e.to_string()))?;
+
+            // Get the response content
+            let content_text = response
+                .first_text()
+                .ok_or_else(|| Error::AiService("Empty response from AI service".to_string()))?;
+
+            // Add assistant response to conversation history for next iteration
+            conversation_history.push(ChatMessage::assistant(content_text.to_string()));
+
+            // Extract JSON from the response
+            let json_str = Self::extract_json_from_response(content_text);
+
+            // Try to parse and validate
+            match RdfDocument::from_json(&json_str) {
+                Ok(doc) => {
+                    // If strict validation is enabled, validate the document
+                    if self.config.strict_validation {
+                        if let Err(e) = doc.validate() {
+                            last_error = Some(e);
+                            continue;
+                        }
+                    }
+                    return Ok(doc);
+                }
+                Err(e) => {
+                    last_error = Some(e);
+                    // If we've exhausted retries, return the error
+                    if attempt == self.config.max_retries {
+                        return Err(last_error.unwrap());
+                    }
+                }
+            }
+        }
+
+        // This should never be reached due to the check above, but return the last error just in case
+        Err(last_error.unwrap_or_else(|| Error::Extraction("Unknown error".to_string())))
+    }
 }
 
 #[async_trait]
 impl RdfExtractor for GenAiExtractor {
     async fn extract(&self, text: &str) -> Result<RdfDocument> {
-        let request = self.build_request(text);
-
-        // Execute the chat request
-        let response = self
-            .client
-            .exec_chat(&self.config.model, request, None)
-            .await
-            .map_err(|e| Error::AiService(e.to_string()))?;
-
-        // Get the response content text using the new genai 0.5 API
-        let content_text = response
-            .first_text()
-            .ok_or_else(|| Error::AiService("Empty response from AI service".to_string()))?;
-
-        // Extract JSON from the response
-        let json_str = Self::extract_json_from_response(content_text);
-
-        // Parse as RDF document
-        RdfDocument::from_json(&json_str)
+        // Use the Instructor pattern with retry logic
+        self.extract_with_retry(text).await
     }
 }
 

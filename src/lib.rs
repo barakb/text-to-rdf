@@ -83,6 +83,13 @@ pub struct ExtractionConfig {
 
     /// Entity linker configuration
     pub entity_linker: EntityLinkerConfig,
+
+    /// Maximum retry attempts for failed extractions (default: 2)
+    /// When extraction fails validation, the error is sent back to the LLM as feedback
+    pub max_retries: u32,
+
+    /// Enable strict schema validation with detailed error messages (default: true)
+    pub strict_validation: bool,
 }
 
 impl Default for ExtractionConfig {
@@ -94,6 +101,8 @@ impl Default for ExtractionConfig {
             system_prompt: None,
             ontologies: vec!["https://schema.org/".to_string()],
             entity_linker: EntityLinkerConfig::default(),
+            max_retries: 2,
+            strict_validation: true,
         }
     }
 }
@@ -119,6 +128,8 @@ impl ExtractionConfig {
     /// - `ENTITY_LINKING_KB_PATH`: Path to local RDF knowledge base (required for "local" strategy)
     /// - `ENTITY_LINKING_SERVICE_URL`: Service URL for remote strategies (default: `DBpedia` Spotlight)
     /// - `ENTITY_LINKING_CONFIDENCE`: Confidence threshold 0.0-1.0 (default: 0.5)
+    /// - `RDF_EXTRACTION_MAX_RETRIES`: Max retry attempts for failed extractions (default: 2)
+    /// - `RDF_EXTRACTION_STRICT_VALIDATION`: Enable strict validation (default: true)
     ///
     /// # Errors
     ///
@@ -198,6 +209,17 @@ impl ExtractionConfig {
             ..EntityLinkerConfig::default()
         };
 
+        // Retry configuration
+        let max_retries = env::var("RDF_EXTRACTION_MAX_RETRIES")
+            .ok()
+            .and_then(|v| v.parse::<u32>().ok())
+            .unwrap_or(2);
+
+        let strict_validation = env::var("RDF_EXTRACTION_STRICT_VALIDATION")
+            .ok()
+            .and_then(|v| v.parse::<bool>().ok())
+            .unwrap_or(true);
+
         Ok(Self {
             model,
             temperature,
@@ -205,6 +227,8 @@ impl ExtractionConfig {
             system_prompt,
             ontologies,
             entity_linker,
+            max_retries,
+            strict_validation,
         })
     }
 
@@ -240,6 +264,20 @@ impl ExtractionConfig {
     #[must_use]
     pub fn with_system_prompt(mut self, prompt: impl Into<String>) -> Self {
         self.system_prompt = Some(prompt.into());
+        self
+    }
+
+    /// Set maximum retry attempts for failed extractions
+    #[must_use]
+    pub const fn with_max_retries(mut self, max_retries: u32) -> Self {
+        self.max_retries = max_retries;
+        self
+    }
+
+    /// Enable or disable strict validation
+    #[must_use]
+    pub const fn with_strict_validation(mut self, strict_validation: bool) -> Self {
+        self.strict_validation = strict_validation;
         self
     }
 }
