@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use crate::{Error, Result};
 
 /// Entity types from Schema.org ontology
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EntityType {
     #[serde(rename = "Person")]
     Person,
@@ -45,6 +45,7 @@ pub struct RdfEntity {
 
 impl RdfEntity {
     /// Create a new RDF entity
+    #[must_use]
     pub fn new(entity_type: EntityType) -> Self {
         Self {
             entity_type,
@@ -55,24 +56,28 @@ impl RdfEntity {
     }
 
     /// Set the entity ID
+    #[must_use]
     pub fn with_id(mut self, id: impl Into<String>) -> Self {
         self.id = Some(id.into());
         self
     }
 
     /// Set the entity name
+    #[must_use]
     pub fn with_name(mut self, name: impl Into<String>) -> Self {
         self.name = Some(name.into());
         self
     }
 
     /// Add a property
+    #[must_use]
     pub fn with_property(mut self, key: impl Into<String>, value: Value) -> Self {
         self.properties.insert(key.into(), value);
         self
     }
 
     /// Get a property value
+    #[must_use]
     pub fn get_property(&self, key: &str) -> Option<&Value> {
         self.properties.get(key)
     }
@@ -91,7 +96,7 @@ pub struct RdfDocument {
 impl RdfDocument {
     /// Create a new RDF document from JSON-LD string
     ///
-    /// Automatically normalizes entity names (e.g., "Alan Bean" -> "Alan_Bean")
+    /// Automatically normalizes entity names (e.g., "Alan Bean" -> "`Alan_Bean`")
     /// to match WebNLG/Wikidata conventions.
     ///
     /// # Errors
@@ -103,7 +108,7 @@ impl RdfDocument {
         Self::from_value(value)
     }
 
-    /// Create a new RDF document from a serde_json::Value
+    /// Create a new RDF document from a `serde_json::Value`
     ///
     /// Automatically normalizes entity names for consistency.
     ///
@@ -164,23 +169,26 @@ impl RdfDocument {
     }
 
     /// Get the entity type
+    #[must_use]
     pub fn get_type(&self) -> Option<&str> {
         self.data.get("@type")?.as_str()
     }
 
     /// Get the entity ID
+    #[must_use]
     pub fn get_id(&self) -> Option<&str> {
         self.data.get("@id")?.as_str()
     }
 
     /// Get a property value
+    #[must_use]
     pub fn get(&self, key: &str) -> Option<&Value> {
         self.data.get(key)
     }
 
     /// Enrich the document with canonical URIs from entity linking
     ///
-    /// Updates the @id field with the canonical URI if available
+    /// Updates the `@id` field with the canonical URI if available
     pub fn enrich_with_uri(&mut self, uri: impl Into<String>) {
         if let Some(obj) = self.data.as_object_mut() {
             obj.insert("@id".to_string(), Value::String(uri.into()));
@@ -188,6 +196,7 @@ impl RdfDocument {
     }
 
     /// Get the entity name
+    #[must_use]
     pub fn get_name(&self) -> Option<&str> {
         self.data.get("name")?.as_str()
     }

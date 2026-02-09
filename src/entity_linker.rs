@@ -6,7 +6,7 @@
 //! - LLM-based disambiguation when multiple candidates exist
 //! - Local Oxigraph store for offline operation
 //!
-//! Supports both remote APIs (DBpedia, Wikidata) and local Rust-native linking
+//! Supports both remote APIs (`DBpedia`, `Wikidata`) and local Rust-native linking
 //! via Oxigraph for production deployments.
 
 use crate::error::{Error, Result};
@@ -45,13 +45,13 @@ pub struct EntityLinkerConfig {
     pub min_candidates_for_llm: usize,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LinkingStrategy {
     /// Use local Oxigraph-based linking (Recommended for production)
     Local,
-    /// Use DBpedia Spotlight API
+    /// Use `DBpedia` Spotlight API
     DbpediaSpotlight,
-    /// Use Wikidata API
+    /// Use `Wikidata` API
     Wikidata,
     /// Disable entity linking (use normalized names only)
     None,
@@ -79,7 +79,7 @@ pub struct EntityLinker {
     config: EntityLinkerConfig,
     /// Local RDF store for Oxigraph-based linking
     store: Option<Arc<Store>>,
-    /// GenAI client for LLM dis ambiguation
+    /// `GenAI` client for LLM disambiguation
     llm_client: Option<genai::Client>,
 }
 
@@ -98,9 +98,9 @@ impl std::fmt::Debug for EntityLinker {
 pub struct LinkedEntity {
     /// Original surface form (text)
     pub surface_form: String,
-    /// Canonical URI (e.g., http://dbpedia.org/resource/Alan_Bean)
+    /// Canonical URI (e.g., <http://dbpedia.org/resource/Alan_Bean>)
     pub uri: String,
-    /// Entity types (e.g., ["Person", "Astronaut"])
+    /// Entity types (e.g., `["Person", "Astronaut"]`)
     pub types: Vec<String>,
     /// Confidence score (0.0 - 1.0)
     pub confidence: f64,
@@ -126,12 +126,19 @@ struct DbpediaResource {
 
 impl EntityLinker {
     /// Create a new entity linker with the given configuration
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if local knowledge base cannot be opened
     pub fn new(config: EntityLinkerConfig) -> Result<Self> {
         let store = if config.strategy == LinkingStrategy::Local {
             // Load local RDF knowledge base from filesystem
             if let Some(kb_path) = &config.local_kb_path {
                 let store = Store::open(kb_path).map_err(|e| {
-                    Error::Config(format!("Failed to open local KB at {:?}: {}", kb_path, e))
+                    Error::Config(format!(
+                        "Failed to open local KB at {}: {e}",
+                        kb_path.display()
+                    ))
                 })?;
                 Some(Arc::new(store))
             } else {
@@ -160,18 +167,22 @@ impl EntityLinker {
     /// Link an entity name to a canonical URI
     ///
     /// Returns None if linking is disabled or no match found above confidence threshold
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the linking service fails or returns invalid data
     pub async fn link_entity(
         &self,
         text: &str,
         entity_name: &str,
-        _entity_type: Option<&str>,
+        entity_type: Option<&str>,
     ) -> Result<Option<LinkedEntity>> {
         if !self.config.enabled {
             return Ok(None);
         }
 
         match self.config.strategy {
-            LinkingStrategy::Local => self.link_with_local(entity_name, _entity_type).await,
+            LinkingStrategy::Local => self.link_with_local(entity_name, entity_type).await,
             LinkingStrategy::DbpediaSpotlight => self.link_with_dbpedia(text, entity_name).await,
             LinkingStrategy::Wikidata => {
                 // Wikidata API implementation would go here
@@ -181,7 +192,7 @@ impl EntityLinker {
         }
     }
 
-    /// Link entity using DBpedia Spotlight API
+    /// Link entity using `DBpedia` Spotlight API
     async fn link_with_dbpedia(
         &self,
         text: &str,
@@ -309,7 +320,7 @@ impl EntityLinker {
 
     /// Execute SPARQL query and calculate confidence scores
     ///
-    /// TODO: Update to use SparqlEvaluator interface when oxigraph 0.5 API is fully documented
+    /// TODO: Update to use `SparqlEvaluator` interface when oxigraph 0.5 API is fully documented
     #[allow(deprecated)]
     fn execute_candidate_query(
         &self,
@@ -320,14 +331,14 @@ impl EntityLinker {
     ) -> Result<Vec<LinkedEntity>> {
         let results = store
             .query(query)
-            .map_err(|e| Error::Extraction(format!("SPARQL query failed: {}", e)))?;
+            .map_err(|e| Error::Extraction(format!("SPARQL query failed: {e}")))?;
 
         let mut candidates = Vec::new();
 
         if let QueryResults::Solutions(solutions) = results {
             for solution in solutions {
                 let solution = solution
-                    .map_err(|e| Error::Extraction(format!("Query solution error: {}", e)))?;
+                    .map_err(|e| Error::Extraction(format!("Query solution error: {e}")))?;
 
                 if let Some(Term::NamedNode(entity_node)) = solution.get("entity") {
                     let uri = entity_node.as_str().to_string();
@@ -351,11 +362,7 @@ impl EntityLinker {
                         }
                     });
 
-                    let types = if let Some(t) = type_str {
-                        vec![t]
-                    } else {
-                        Vec::new()
-                    };
+                    let types = type_str.map_or_else(Vec::new, |t| vec![t]);
 
                     // Calculate confidence using Jaro-Winkler similarity
                     let confidence = if exact_match {
@@ -453,26 +460,29 @@ Your response (just the number):"#,
         let response = llm_client
             .exec_chat(&self.config.service_url, chat_req, None)
             .await
-            .map_err(|e| Error::Network(format!("LLM disambiguation failed: {}", e)))?;
+            .map_err(|e| Error::Network(format!("LLM disambiguation failed: {e}")))?;
 
         // Parse LLM response using genai 0.5 API
         let response_text = response.first_text().unwrap_or("");
         let selected_idx: usize = response_text
             .trim()
             .parse()
-            .map_err(|_| Error::Extraction(format!("Invalid LLM response: {}", response_text)))?;
+            .map_err(|_| Error::Extraction(format!("Invalid LLM response: {response_text}")))?;
 
         if selected_idx > 0 && selected_idx <= candidates.len() {
             Ok(Some(candidates[selected_idx - 1].clone()))
         } else {
             Err(Error::Extraction(format!(
-                "LLM selected invalid candidate index: {}",
-                selected_idx
+                "LLM selected invalid candidate index: {selected_idx}"
             )))
         }
     }
 
     /// Batch link multiple entities from the same text
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any entity linking operation fails
     pub async fn link_entities(
         &self,
         text: &str,
@@ -489,7 +499,7 @@ Your response (just the number):"#,
     }
 }
 
-/// Cached DBpedia Spotlight API call
+/// Cached `DBpedia` Spotlight API call
 ///
 /// Caches results for 1 hour to reduce API load
 #[cached(
@@ -508,7 +518,7 @@ async fn link_with_dbpedia_cached(
         .build()
         .map_err(|e| Error::Network(e.to_string()))?;
 
-    let url = format!("{}/annotate", service_url);
+    let url = format!("{service_url}/annotate");
 
     let response = client
         .post(&url)
@@ -519,7 +529,7 @@ async fn link_with_dbpedia_cached(
         ])
         .send()
         .await
-        .map_err(|e| Error::Network(format!("DBpedia Spotlight request failed: {}", e)))?;
+        .map_err(|e| Error::Network(format!("DBpedia Spotlight request failed: {e}")))?;
 
     if !response.status().is_success() {
         return Ok(Vec::new());
@@ -528,7 +538,7 @@ async fn link_with_dbpedia_cached(
     let spotlight_response: DbpediaSpotlightResponse = response
         .json()
         .await
-        .map_err(|e| Error::Network(format!("Failed to parse DBpedia response: {}", e)))?;
+        .map_err(|e| Error::Network(format!("Failed to parse DBpedia response: {e}")))?;
 
     let entities = spotlight_response
         .resources

@@ -23,6 +23,7 @@ use slug::slugify;
 /// assert_eq!(normalize_entity_name("José García"), "jose_garcia");
 /// assert_eq!(normalize_entity_name("MIT"), "mit");
 /// ```
+#[must_use]
 pub fn normalize_entity_name(name: &str) -> String {
     // Use slug crate for proper Unicode normalization
     // Replace hyphens with underscores to match RDF conventions
@@ -47,6 +48,7 @@ pub fn normalize_entity_name(name: &str) -> String {
 /// assert_eq!(normalize_predicate("running"), "run");
 /// assert_eq!(normalize_predicate("graduated"), "graduat");
 /// ```
+#[must_use]
 pub fn normalize_predicate(predicate: &str) -> String {
     let stemmer = Stemmer::create(Algorithm::English);
 
@@ -54,12 +56,12 @@ pub fn normalize_predicate(predicate: &str) -> String {
     let normalized = predicate.to_lowercase();
 
     // If it's a camelCase predicate (like "birthDate"), split and stem each word
-    if normalized.chars().any(|c| c.is_uppercase()) {
+    if normalized.chars().any(char::is_uppercase) {
         // Split on uppercase boundaries
         let words = split_camel_case(&normalized);
         words
             .iter()
-            .map(|w| stemmer.stem(w).to_string())
+            .map(|w| stemmer.stem(w).into_owned())
             .collect::<Vec<_>>()
             .join("_")
     } else {
@@ -68,7 +70,7 @@ pub fn normalize_predicate(predicate: &str) -> String {
     }
 }
 
-/// Split camelCase or PascalCase into words
+/// Split `camelCase` or `PascalCase` into words
 fn split_camel_case(s: &str) -> Vec<String> {
     let mut words = Vec::new();
     let mut current = String::new();
@@ -98,7 +100,7 @@ pub fn normalize_jsonld_value(value: &mut serde_json::Value) {
             if !s.starts_with("http")
                 && !s.contains("://")
                 && !s.contains('-')
-                && s.chars().any(|c| c.is_whitespace())
+                && s.chars().any(char::is_whitespace)
                 && s.chars().filter(|c| c.is_uppercase()).count() > 0
             {
                 // Likely a proper name with spaces

@@ -100,6 +100,7 @@ impl Default for ExtractionConfig {
 
 impl ExtractionConfig {
     /// Create a new configuration with default values
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -116,7 +117,7 @@ impl ExtractionConfig {
     /// - `ENTITY_LINKING_ENABLED`: Enable entity linking (default: false)
     /// - `ENTITY_LINKING_STRATEGY`: Strategy: "local", "dbpedia", "wikidata", or "none" (default: "none")
     /// - `ENTITY_LINKING_KB_PATH`: Path to local RDF knowledge base (required for "local" strategy)
-    /// - `ENTITY_LINKING_SERVICE_URL`: Service URL for remote strategies (default: DBpedia Spotlight)
+    /// - `ENTITY_LINKING_SERVICE_URL`: Service URL for remote strategies (default: `DBpedia` Spotlight)
     /// - `ENTITY_LINKING_CONFIDENCE`: Confidence threshold 0.0-1.0 (default: 0.5)
     ///
     /// # Errors
@@ -154,9 +155,10 @@ impl ExtractionConfig {
 
         let system_prompt = env::var("GENAI_SYSTEM_PROMPT").ok();
 
-        let ontologies = env::var("RDF_ONTOLOGIES")
-            .map(|v| v.split(',').map(|s| s.trim().to_string()).collect())
-            .unwrap_or_else(|_| vec!["https://schema.org/".to_string()]);
+        let ontologies = env::var("RDF_ONTOLOGIES").map_or_else(
+            |_| vec!["https://schema.org/".to_string()],
+            |v| v.split(',').map(|s| s.trim().to_string()).collect(),
+        );
 
         // Entity linker configuration
         let entity_linker_enabled = env::var("ENTITY_LINKING_ENABLED")
@@ -207,30 +209,35 @@ impl ExtractionConfig {
     }
 
     /// Set the AI model to use
+    #[must_use]
     pub fn with_model(mut self, model: impl Into<String>) -> Self {
         self.model = model.into();
         self
     }
 
     /// Set the temperature
-    pub fn with_temperature(mut self, temperature: f32) -> Self {
+    #[must_use]
+    pub const fn with_temperature(mut self, temperature: f32) -> Self {
         self.temperature = Some(temperature);
         self
     }
 
     /// Set the maximum tokens
-    pub fn with_max_tokens(mut self, max_tokens: u32) -> Self {
+    #[must_use]
+    pub const fn with_max_tokens(mut self, max_tokens: u32) -> Self {
         self.max_tokens = Some(max_tokens);
         self
     }
 
     /// Add an ontology namespace
+    #[must_use]
     pub fn with_ontology(mut self, ontology: impl Into<String>) -> Self {
         self.ontologies.push(ontology.into());
         self
     }
 
     /// Set custom system prompt
+    #[must_use]
     pub fn with_system_prompt(mut self, prompt: impl Into<String>) -> Self {
         self.system_prompt = Some(prompt.into());
         self

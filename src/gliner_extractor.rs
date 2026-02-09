@@ -1,14 +1,14 @@
-//! GLiNER-based Entity Extraction - Stage 1 of the RDF extraction pipeline
+//! `GLiNER`-based Entity Extraction - Stage 1 of the RDF extraction pipeline
 //!
-//! Uses GLiNER (Generalist and Lightweight Named Entity Recognition) for zero-shot
+//! Uses `GLiNER` (Generalist and Lightweight Named Entity Recognition) for zero-shot
 //! entity extraction. This provides:
 //! - High recall (doesn't miss entities like LLMs sometimes do)
 //! - Provenance (exact character offsets for each entity)
 //! - No hallucinations (only returns what's in the text)
-//! - 4x faster than Python GLiNER
+//! - 4x faster than Python `GLiNER`
 //! - No API costs (runs locally)
 //!
-//! GLiNER is particularly good for the Discovery phase, finding all entities
+//! `GLiNER` is particularly good for the Discovery phase, finding all entities
 //! with their exact locations in the text. Relations can then be extracted by
 //! an LLM or rule-based system.
 
@@ -350,6 +350,9 @@ pub struct GlinerExtractor;
 
 #[cfg(not(feature = "gliner"))]
 impl GlinerExtractor {
+    /// # Errors
+    ///
+    /// Returns an error indicating that the `GLiNER` feature is not enabled
     pub fn new(_config: GlinerConfig) -> Result<Self, crate::error::Error> {
         Err(crate::error::Error::Config(
             "GLiNER feature not enabled. Rebuild with --features gliner".to_string(),

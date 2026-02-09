@@ -48,6 +48,6 @@ pub enum Error {
 // Allow conversion from genai errors if needed
 impl From<Box<dyn std::error::Error + Send + Sync>> for Error {
     fn from(err: Box<dyn std::error::Error + Send + Sync>) -> Self {
-        Error::AiService(err.to_string())
+        Self::AiService(err.to_string())
     }
 }

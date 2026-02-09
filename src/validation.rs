@@ -30,7 +30,7 @@ pub struct Violation {
     pub severity: Severity,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Severity {
     Error,
     Warning,
@@ -49,11 +49,13 @@ impl Default for RdfValidator {
 
 impl RdfValidator {
     /// Create a new validator with no rules
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self { rules: Vec::new() }
     }
 
-    /// Create a validator with Schema.org standard rules
+    /// Create a validator with `Schema.org` standard rules
+    #[must_use]
     pub fn with_schema_org_rules() -> Self {
         let mut validator = Self::new();
 
@@ -90,6 +92,7 @@ impl RdfValidator {
     }
 
     /// Validate an RDF document
+    #[must_use]
     pub fn validate(&self, document: &RdfDocument) -> ValidationResult {
         let mut violations = Vec::new();
 
@@ -97,7 +100,7 @@ impl RdfValidator {
         if let Err(e) = document.validate() {
             violations.push(Violation {
                 rule: "basic_structure".to_string(),
-                message: format!("Basic validation failed: {}", e),
+                message: format!("Basic validation failed: {e}"),
                 severity: Severity::Error,
             });
             return ValidationResult {
@@ -119,12 +122,12 @@ impl RdfValidator {
 
             // Check required properties
             for required_prop in &rule.required_properties {
-                if !self.has_property(document, required_prop) {
+                if !Self::has_property(document, required_prop) {
                     violations.push(Violation {
                         rule: rule.name.clone(),
                         message: format!(
-                            "Missing required property '{}': {}",
-                            required_prop, rule.description
+                            "Missing required property '{required_prop}': {}",
+                            rule.description
                         ),
                         severity: Severity::Error,
                     });
@@ -134,7 +137,7 @@ impl RdfValidator {
 
         // Validate dates if present
         if let Some(birth_date) = document.get("birthDate") {
-            if !self.is_valid_date(birth_date) {
+            if !Self::is_valid_date(birth_date) {
                 violations.push(Violation {
                     rule: "valid_date_format".to_string(),
                     message: "birthDate must be in ISO 8601 format (YYYY-MM-DD)".to_string(),
@@ -145,7 +148,7 @@ impl RdfValidator {
 
         // Validate URLs if present
         if let Some(id) = document.get_id() {
-            if !self.is_valid_url(id) {
+            if !Self::is_valid_url(id) {
                 violations.push(Violation {
                     rule: "valid_uri".to_string(),
                     message: "@id must be a valid URI".to_string(),
@@ -160,33 +163,33 @@ impl RdfValidator {
         }
     }
 
-    fn has_property(&self, document: &RdfDocument, property: &str) -> bool {
-        document.get(property).is_some() && !document.get(property).unwrap().is_null()
+    fn has_property(document: &RdfDocument, property: &str) -> bool {
+        document.get(property).is_some_and(|v| !v.is_null())
     }
 
-    fn is_valid_date(&self, value: &Value) -> bool {
-        if let Some(date_str) = value.as_str() {
+    fn is_valid_date(value: &Value) -> bool {
+        value.as_str().is_some_and(|date_str| {
             // Simple ISO 8601 date validation (YYYY-MM-DD)
             date_str.len() == 10
                 && date_str.chars().nth(4) == Some('-')
                 && date_str.chars().nth(7) == Some('-')
-        } else {
-            false
-        }
+        })
     }
 
-    fn is_valid_url(&self, url: &str) -> bool {
+    fn is_valid_url(url: &str) -> bool {
         url.starts_with("http://") || url.starts_with("https://")
     }
 }
 
 impl ValidationResult {
     /// Check if validation passed
-    pub fn is_valid(&self) -> bool {
+    #[must_use]
+    pub const fn is_valid(&self) -> bool {
         self.valid
     }
 
     /// Get all error violations
+    #[must_use]
     pub fn errors(&self) -> Vec<&Violation> {
         self.violations
             .iter()
@@ -195,6 +198,7 @@ impl ValidationResult {
     }
 
     /// Get all warning violations
+    #[must_use]
     pub fn warnings(&self) -> Vec<&Violation> {
         self.violations
             .iter()
