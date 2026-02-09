@@ -1,0 +1,81 @@
+[
+  {
+    "id": "astronaut_birthdate_1",
+    "raw_text": "Alan Bean was born on the 15th of March 1932.",
+    "expected_triples": [
+      {
+        "subject": "alan_bean",
+        "predicate": "birthdat",
+        "object": "1932-03-15"
+      }
+    ],
+    "expected_jsonld": {
+      "@context": "https://schema.org/",
+      "@type": "Person",
+      "name": "Alan Bean",
+      "birthDate": "1932-03-15"
+    }
+  },
+  {
+    "id": "astronaut_education_1",
+    "raw_text": "Alan Bean graduated from UT Austin in 1955 with a B.S.",
+    "expected_triples": [
+      {
+        "subject": "alan_bean",
+        "predicate": "alumniof",
+        "object": "UT Austin"
+      }
+    ],
+    "expected_jsonld": {
+      "@context": "https://schema.org/",
+      "@type": "Person",
+      "name": "Alan Bean",
+      "alumniOf": {
+        "@type": "EducationalOrganization",
+        "name": "UT Austin"
+      }
+    }
+  },
+  {
+    "id": "airport_cityserved_1",
+    "raw_text": "Aarhus Airport serves the city of Aarhus, Denmark.",
+    "expected_triples": [
+      {
+        "subject": "aarhus_airport",
+        "predicate": "locat",
+        "object": "Aarhus"
+      }
+    ],
+    "expected_jsonld": {
+      "@context": "https://schema.org/",
+      "@type": "Airport",
+      "name": "Aarhus Airport",
+      "location": {
+        "@type": "Place",
+        "name": "Aarhus",
+        "addressCountry": "Denmark"
+      }
+    }
+  },
+  {
+    "id": "airport_location_1",
+    "raw_text": "The Aarhus is the airport of Aarhus, Denmark.",
+    "expected_triples": [
+      {
+        "subject": "aarhus_airport",
+        "predicate": "locat",
+        "object": "Aarhus"
+      }
+    ],
+    "expected_jsonld": {
+      "@context": "https://schema.org/",
+      "@type": "Airport",
+      "name": "Aarhus Airport",
+      "location": {
+        "@type": "Place",
+        "name": "Aarhus",
+        "addressCountry": "Denmark"
+      }
+    }
+  }
+]

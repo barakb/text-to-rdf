@@ -1,0 +1,22 @@
+[package]
+name = "text-to-rdf"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+genai = "0.1"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+async-trait = "0.1"
+dotenvy = "0.15"
+slug = "0.1"
+rust-stemmers = "1.2"
+reqwest = { version = "0.12", features = ["json"] }
+url = "2.5"
+cached = { version = "0.53", features = ["async"] }
+oxigraph = "0.4"
+
+[dev-dependencies]
+anyhow = "1"

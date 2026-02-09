@@ -1,0 +1,12 @@
+# Cargo configuration for text-to-rdf project
+#
+# This file configures environment variables needed for building
+# dependencies with C++ code (oxigraph/RocksDB) on macOS.
+
+[build]
+# Set CXXFLAGS to point to macOS SDK for C++ compilation
+rustflags = []
+
+[env]
+# Required for oxigraph (RocksDB) C++ compilation on macOS
+CXXFLAGS = { value = "-isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk", force = true }
