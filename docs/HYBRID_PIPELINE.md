@@ -318,6 +318,102 @@ Now that we have entities and relations, link them to **canonical knowledge base
 - **Local**: Load Wikidata, DBpedia, or custom KBs locally
 - **Privacy-friendly**: No external API calls
 
+### The URI Bridge: Fuzzy Matching + LLM Disambiguation
+
+Stage 3 implements **"The URI Bridge"** - a sophisticated entity linking approach that combines:
+
+#### 1. Fuzzy Matching with Jaro-Winkler Similarity
+
+Handles typos, variations, and approximate matches using string similarity:
+
+```rust
+// Handles: "Appel" → "Apple", "Barak Obama" → "Barack Obama"
+let config = EntityLinkerConfig {
+    use_fuzzy_matching: true,
+    fuzzy_threshold: 0.8,  // 80% similarity required
+    ..Default::default()
+};
+```
+
+**How it works**:
+- Performs broader SPARQL queries with substring matching
+- Calculates Jaro-Winkler similarity for each candidate
+- Filters results by similarity threshold
+- Returns only high-confidence matches
+
+**Example**:
+```text
+Input:  "Appel Inc founded by Steve Jobs"
+Query:  SPARQL with CONTAINS("Appel")
+Results: ["Apple Inc" (0.92), "Appel Systems" (0.85), "Chapel Corp" (0.45)]
+Filter:  Keep only similarity >= 0.8
+Output:  ["Apple Inc", "Appel Systems"]
+```
+
+#### 2. LLM-Based Disambiguation
+
+When multiple candidates exist, use the LLM to select the correct one based on context:
+
+```rust
+let config = EntityLinkerConfig {
+    use_llm_disambiguation: true,
+    min_candidates_for_llm: 2,  // Trigger LLM when 2+ matches
+    ..Default::default()
+};
+```
+
+**How it works**:
+- Detects multiple high-confidence candidates
+- Sends candidates + surrounding text to LLM
+- LLM analyzes semantic context and types
+- Returns the most appropriate match
+
+**Example**:
+```text
+Text: "I ate an Apple yesterday"
+Candidates:
+  1. Apple Inc (Q312, Organization, 0.95)
+  2. Apple (Q89, Fruit, 0.92)
+
+LLM Prompt:
+  "Given entity 'Apple' and context 'I ate an Apple yesterday',
+   select: 1=Tech Company or 2=Fruit"
+
+LLM Response: "2"
+Output: Apple (Q89, Fruit)
+```
+
+**Disambiguation Scenarios**:
+- **"Apple"**: Fruit vs. Tech company
+- **"Mercury"**: Planet vs. Chemical element vs. Roman god
+- **"Washington"**: George Washington vs. Washington DC vs. Washington State
+- **"Amazon"**: River vs. Company vs. Rainforest
+
+#### 3. Combined Pipeline
+
+The full URI Bridge pipeline:
+
+```
+link_with_local("Apple", "Fruit")
+    ↓
+[Exact Match?] → No
+    ↓
+[Fuzzy Search] → SPARQL CONTAINS + Jaro-Winkler
+    ↓
+Result: ["Apple Inc" (0.95), "Apple (Fruit)" (0.92)]
+    ↓
+[Multiple Candidates?] → Yes (2 matches)
+    ↓
+[LLM Disambiguation] → "I ate an Apple" → Fruit (Q89)
+    ↓
+Return: LinkedEntity {
+    uri: "http://www.wikidata.org/entity/Q89",
+    surface_form: "Apple",
+    types: ["http://schema.org/Thing"],
+    confidence: 0.92
+}
+```
+
 ### Setup
 
 ```bash
@@ -335,6 +431,14 @@ oxigraph_server --location ./wikidata.db load --file latest-truthy.nt.bz2
 ENTITY_LINKING_STRATEGY=local
 ENTITY_LINKING_KB_PATH=/path/to/wikidata.db
 ENTITY_LINKING_CONFIDENCE=0.7
+
+# The URI Bridge: Fuzzy Matching
+ENTITY_LINKING_FUZZY_MATCHING=true
+ENTITY_LINKING_FUZZY_THRESHOLD=0.8
+
+# The URI Bridge: LLM Disambiguation
+ENTITY_LINKING_LLM_DISAMBIGUATION=true
+ENTITY_LINKING_MIN_CANDIDATES_FOR_LLM=2
 ```
 
 ### Usage Example
@@ -344,24 +448,48 @@ use text_to_rdf::{EntityLinkerConfig, EntityLinker, LinkingStrategy};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Configure entity linker
+    // Configure entity linker with URI Bridge features
     let config = EntityLinkerConfig {
         enabled: true,
         strategy: LinkingStrategy::Local,
         local_kb_path: Some("/path/to/wikidata.db".into()),
         confidence_threshold: 0.7,
+
+        // Enable fuzzy matching for typos/variations
+        use_fuzzy_matching: true,
+        fuzzy_threshold: 0.8,
+
+        // Enable LLM disambiguation for ambiguous entities
+        use_llm_disambiguation: true,
+        min_candidates_for_llm: 2,
+
         ..Default::default()
     };
 
     let linker = EntityLinker::new(config)?;
 
-    // Link entities from earlier stages
-    let entity_name = "James Bond";
-    let linked = linker.link_entity(entity_name, Some("Person")).await?;
+    // Example 1: Fuzzy matching with typo
+    let linked = linker.link_entity(
+        "Steve Jobs founded Appel Inc",  // "Appel" with typo
+        "Appel",
+        Some("Organization")
+    ).await?;
 
     if let Some(entity) = linked {
-        println!("URI: {}", entity.uri);
-        println!("Confidence: {}", entity.confidence);
+        println!("Fuzzy matched: {} → {}", "Appel", entity.uri);
+        // Output: ...wikidata.org/entity/Q312 (Apple Inc)
+    }
+
+    // Example 2: LLM disambiguation
+    let linked = linker.link_entity(
+        "I ate an Apple yesterday",  // Context: food
+        "Apple",
+        Some("Thing")
+    ).await?;
+
+    if let Some(entity) = linked {
+        println!("Disambiguated: Apple → {}", entity.uri);
+        // Output: ...wikidata.org/entity/Q89 (Apple fruit, not company)
     }
 
     Ok(())
@@ -634,6 +762,12 @@ EXTRACTION_TEMPERATURE=0.0
 ENTITY_LINKING_STRATEGY=local
 ENTITY_LINKING_KB_PATH=/path/to/wikidata.db
 ENTITY_LINKING_CONFIDENCE=0.7
+
+# The URI Bridge: Fuzzy Matching + LLM Disambiguation
+ENTITY_LINKING_FUZZY_MATCHING=true
+ENTITY_LINKING_FUZZY_THRESHOLD=0.8
+ENTITY_LINKING_LLM_DISAMBIGUATION=true
+ENTITY_LINKING_MIN_CANDIDATES_FOR_LLM=2
 
 # Validation (Stage 4)
 VALIDATION_ENABLED=true

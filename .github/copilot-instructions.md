@@ -55,6 +55,6 @@ When writing extraction logic, follow this sequence:
 
 
 ## 7. Prompting Guidelines for Copilot
-- **Avoid Hallucinations**: If a library or crate doesn't exist (check `genai` docs), do not invent functions. 
+- **Avoid Hallucinations**: If a library or crate doesn't exist (check `genai` docs), do not invent functions.
 - **Context Awareness**: Before generating a new extractor, check if there is an existing `Trait` in the codebase to implement.
-- **Document**: Keekp all documents always up to date.
+- **Document**: Keep all documents always up to date.

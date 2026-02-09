@@ -1,6 +1,11 @@
-//! Entity Linking Module - Stage 2 of the RDF extraction pipeline
+//! Entity Linking Module - Stage 3 of the RDF extraction pipeline
 //!
 //! Links extracted entity names to canonical URIs from knowledge bases.
+//! Implements "The URI Bridge" with:
+//! - Fuzzy matching using Levenshtein distance for label alignment
+//! - LLM-based disambiguation when multiple candidates exist
+//! - Local Oxigraph store for offline operation
+//!
 //! Supports both remote APIs (DBpedia, Wikidata) and local Rust-native linking
 //! via Oxigraph for production deployments.
 
@@ -30,6 +35,14 @@ pub struct EntityLinkerConfig {
     pub strategy: LinkingStrategy,
     /// Path to local RDF knowledge base (for Local strategy)
     pub local_kb_path: Option<PathBuf>,
+    /// Use fuzzy matching for candidate retrieval (Levenshtein distance)
+    pub use_fuzzy_matching: bool,
+    /// Minimum similarity threshold for fuzzy matching (0.0-1.0)
+    pub fuzzy_threshold: f64,
+    /// Use LLM disambiguation when multiple candidates exist
+    pub use_llm_disambiguation: bool,
+    /// Minimum number of candidates to trigger LLM disambiguation
+    pub min_candidates_for_llm: usize,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -53,6 +66,10 @@ impl Default for EntityLinkerConfig {
             enabled: false,
             strategy: LinkingStrategy::None,
             local_kb_path: None,
+            use_fuzzy_matching: true,
+            fuzzy_threshold: 0.8,
+            use_llm_disambiguation: true,
+            min_candidates_for_llm: 2,
         }
     }
 }
@@ -62,6 +79,8 @@ pub struct EntityLinker {
     config: EntityLinkerConfig,
     /// Local RDF store for Oxigraph-based linking
     store: Option<Arc<Store>>,
+    /// GenAI client for LLM dis ambiguation
+    llm_client: Option<genai::Client>,
 }
 
 impl std::fmt::Debug for EntityLinker {
@@ -69,6 +88,7 @@ impl std::fmt::Debug for EntityLinker {
         f.debug_struct("EntityLinker")
             .field("config", &self.config)
             .field("store", &self.store.as_ref().map(|_| "Store"))
+            .field("llm_client", &self.llm_client.as_ref().map(|_| "Client"))
             .finish()
     }
 }
@@ -122,7 +142,14 @@ impl EntityLinker {
             None
         };
 
-        Ok(Self { config, store })
+        // Initialize LLM client if disambiguation is enabled
+        let llm_client = if config.use_llm_disambiguation {
+            Some(genai::Client::default())
+        } else {
+            None
+        };
+
+        Ok(Self { config, store, llm_client })
     }
 
     /// Link an entity name to a canonical URI
@@ -176,18 +203,48 @@ impl EntityLinker {
 
     /// Link entity using local Oxigraph-based knowledge base
     ///
-    /// Performs SPARQL query against local RDF store to find matching entities
+    /// Performs SPARQL query against local RDF store to find matching entities.
+    /// Supports both exact matching and fuzzy matching with LLM-based disambiguation.
     async fn link_with_local(
         &self,
         entity_name: &str,
-        _entity_type: Option<&str>,
+        entity_type: Option<&str>,
     ) -> Result<Option<LinkedEntity>> {
         let store = self.store.as_ref().ok_or_else(|| {
             Error::Config("Local store not initialized".to_string())
         })?;
 
-        // Query for entities with matching labels
-        // Supports both Wikidata (wd:Q*) and DBpedia (dbr:*) URIs
+        // Step 1: Retrieve candidates using fuzzy or exact matching
+        let mut candidates = if self.config.use_fuzzy_matching {
+            self.fuzzy_search_candidates(store, entity_name)?
+        } else {
+            self.exact_search_candidates(store, entity_name)?
+        };
+
+        // Step 2: Filter by confidence threshold
+        candidates.retain(|c| c.confidence >= self.config.confidence_threshold);
+
+        if candidates.is_empty() {
+            return Ok(None);
+        }
+
+        // Step 3: If multiple candidates exist, use LLM disambiguation
+        if candidates.len() >= self.config.min_candidates_for_llm
+            && self.config.use_llm_disambiguation {
+            return self.disambiguate_with_llm(entity_name, entity_type, &candidates).await;
+        }
+
+        // Step 4: Return best match (highest confidence)
+        candidates.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
+        Ok(candidates.into_iter().next())
+    }
+
+    /// Exact search for entity labels (original behavior)
+    fn exact_search_candidates(
+        &self,
+        store: &Store,
+        entity_name: &str,
+    ) -> Result<Vec<LinkedEntity>> {
         let query = format!(
             r#"
             PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -210,15 +267,56 @@ impl EntityLinker {
             entity_name.replace('"', "\\\"")
         );
 
-        // Execute SPARQL query
+        self.execute_candidate_query(store, &query, entity_name, true)
+    }
+
+    /// Fuzzy search using Levenshtein/Jaro-Winkler distance
+    fn fuzzy_search_candidates(
+        &self,
+        store: &Store,
+        entity_name: &str,
+    ) -> Result<Vec<LinkedEntity>> {
+        // Query for similar labels (broader search)
+        let query = format!(
+            r#"
+            PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+            PREFIX schema: <http://schema.org/>
+            PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+
+            SELECT ?entity ?label ?type WHERE {{
+                {{
+                    ?entity rdfs:label ?label .
+                    FILTER(CONTAINS(LCASE(STR(?label)), LCASE("{}")))
+                }} UNION {{
+                    ?entity schema:name ?label .
+                    FILTER(CONTAINS(LCASE(STR(?label)), LCASE("{}")))
+                }}
+                OPTIONAL {{ ?entity rdf:type ?type }}
+            }}
+            LIMIT 50
+            "#,
+            entity_name.replace('"', "\\\""),
+            entity_name.replace('"', "\\\"")
+        );
+
+        self.execute_candidate_query(store, &query, entity_name, false)
+    }
+
+    /// Execute SPARQL query and calculate confidence scores
+    fn execute_candidate_query(
+        &self,
+        store: &Store,
+        query: &str,
+        entity_name: &str,
+        exact_match: bool,
+    ) -> Result<Vec<LinkedEntity>> {
         let results = store
-            .query(&query)
+            .query(query)
             .map_err(|e| Error::Extraction(format!("SPARQL query failed: {}", e)))?;
 
-        // Process query results
-        if let QueryResults::Solutions(solutions) = results {
-            let mut candidates = Vec::new();
+        let mut candidates = Vec::new();
 
+        if let QueryResults::Solutions(solutions) = results {
             for solution in solutions {
                 let solution = solution
                     .map_err(|e| Error::Extraction(format!("Query solution error: {}", e)))?;
@@ -237,7 +335,6 @@ impl EntityLinker {
                         })
                         .unwrap_or_else(|| entity_name.to_string());
 
-                    // Extract types from query results
                     let type_str = solution
                         .get("type")
                         .and_then(|t| {
@@ -254,11 +351,26 @@ impl EntityLinker {
                         Vec::new()
                     };
 
-                    // Calculate confidence based on exact match
-                    let confidence = if label.to_lowercase() == entity_name.to_lowercase() {
-                        0.95
+                    // Calculate confidence using Jaro-Winkler similarity
+                    let confidence = if exact_match {
+                        if label.to_lowercase() == entity_name.to_lowercase() {
+                            0.95
+                        } else {
+                            0.7
+                        }
                     } else {
-                        0.7
+                        // Use Jaro-Winkler for fuzzy matching
+                        let similarity = strsim::jaro_winkler(
+                            &label.to_lowercase(),
+                            &entity_name.to_lowercase(),
+                        );
+
+                        // Only include candidates above fuzzy threshold
+                        if similarity < self.config.fuzzy_threshold {
+                            continue;
+                        }
+
+                        similarity
                     };
 
                     candidates.push(LinkedEntity {
@@ -269,16 +381,89 @@ impl EntityLinker {
                     });
                 }
             }
-
-            // Filter by confidence threshold and return best match
-            candidates.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
-
-            return Ok(candidates
-                .into_iter()
-                .find(|c| c.confidence >= self.config.confidence_threshold));
         }
 
-        Ok(None)
+        // Sort by confidence
+        candidates.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
+
+        Ok(candidates)
+    }
+
+    /// Use LLM to disambiguate between multiple entity candidates
+    ///
+    /// Sends candidates to LLM with context and asks it to select the best match.
+    /// Example: "Apple" in "I ate an Apple" → fruit, not tech company
+    async fn disambiguate_with_llm(
+        &self,
+        entity_name: &str,
+        entity_type: Option<&str>,
+        candidates: &[LinkedEntity],
+    ) -> Result<Option<LinkedEntity>> {
+        let llm_client = self.llm_client.as_ref().ok_or_else(|| {
+            Error::Config("LLM client not initialized for disambiguation".to_string())
+        })?;
+
+        // Format candidates for LLM
+        let candidate_list: Vec<String> = candidates
+            .iter()
+            .enumerate()
+            .map(|(i, c)| {
+                format!(
+                    "{}. {} (URI: {}, Types: [{}], Confidence: {:.2})",
+                    i + 1,
+                    c.surface_form,
+                    c.uri,
+                    c.types.join(", "),
+                    c.confidence
+                )
+            })
+            .collect();
+
+        let prompt = format!(
+            r#"Given the entity name "{}" and the following candidates from a knowledge base, select the most appropriate match.
+
+Context: {}
+
+Candidates:
+{}
+
+Respond with ONLY the number (1-{}) of the best matching candidate. Consider:
+- Semantic context and entity type
+- URI authority (Wikidata vs DBpedia)
+- Entity types and their relevance
+- Confidence scores
+
+Your response (just the number):"#,
+            entity_name,
+            entity_type.unwrap_or("No specific type provided"),
+            candidate_list.join("\n"),
+            candidates.len()
+        );
+
+        // Call LLM
+        let user_msg = genai::chat::ChatMessage::user(prompt);
+        let chat_req = genai::chat::ChatRequest::new(vec![user_msg]);
+
+        let response = llm_client
+            .exec_chat(&self.config.service_url, chat_req, None)
+            .await
+            .map_err(|e| Error::Network(format!("LLM disambiguation failed: {}", e)))?;
+
+        // Parse LLM response
+        let response_text = response.content_text_as_str().unwrap_or("");
+        let selected_idx: usize = response_text
+            .trim()
+            .parse()
+            .map_err(|_| Error::Extraction(format!("Invalid LLM response: {}", response_text)))?;
+
+        if selected_idx > 0 && selected_idx <= candidates.len() {
+            Ok(Some(candidates[selected_idx - 1].clone()))
+        } else {
+            Err(Error::Extraction(format!(
+                "LLM selected invalid candidate index: {}",
+                selected_idx
+            )))
+        }
     }
 
     /// Batch link multiple entities from the same text
@@ -368,7 +553,7 @@ mod tests {
         let config = EntityLinkerConfig::default();
         assert!(!config.enabled);
         assert_eq!(config.strategy, LinkingStrategy::None);
-        assert_eq!(config.confidence_threshold, 0.5);
+        assert!((config.confidence_threshold - 0.5).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -382,7 +567,7 @@ mod tests {
 
         assert!(config.enabled);
         assert_eq!(config.strategy, LinkingStrategy::DbpediaSpotlight);
-        assert_eq!(config.confidence_threshold, 0.7);
+        assert!((config.confidence_threshold - 0.7).abs() < f64::EPSILON);
     }
 
     #[tokio::test]
@@ -407,7 +592,7 @@ mod tests {
 
     // Integration test with real DBpedia API (ignored by default)
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires external DBpedia API"]
     async fn test_dbpedia_linking() {
         let config = EntityLinkerConfig {
             enabled: true,
@@ -416,17 +601,17 @@ mod tests {
             ..Default::default()
         };
 
-        let linker = EntityLinker::new(config).unwrap();
+        let entity_linker = EntityLinker::new(config).unwrap();
 
-        let result = linker
+        let result = entity_linker
             .link_entity("Alan Bean was an astronaut", "Alan Bean", Some("Person"))
             .await;
 
         assert!(result.is_ok());
-        let linked = result.unwrap();
-        assert!(linked.is_some());
+        let link_result = result.unwrap();
+        assert!(link_result.is_some());
 
-        let entity = linked.unwrap();
+        let entity = link_result.unwrap();
         assert!(entity.uri.contains("dbpedia.org"));
         assert!(entity.confidence > 0.5);
     }

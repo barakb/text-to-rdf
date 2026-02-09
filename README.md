@@ -87,6 +87,10 @@ Create a `.env` file in your project root with these variables:
 | `ENTITY_LINKING_STRATEGY` | No | `none` | Strategy: `local`, `dbpedia`, `wikidata`, or `none` |
 | `ENTITY_LINKING_KB_PATH` | No | - | Path to local RDF knowledge base (for `local` strategy) |
 | `ENTITY_LINKING_CONFIDENCE` | No | `0.5` | Confidence threshold 0.0-1.0 |
+| `ENTITY_LINKING_FUZZY_MATCHING` | No | `true` | Enable fuzzy matching with Jaro-Winkler similarity |
+| `ENTITY_LINKING_FUZZY_THRESHOLD` | No | `0.8` | Min similarity for fuzzy matches (0.0-1.0) |
+| `ENTITY_LINKING_LLM_DISAMBIGUATION` | No | `true` | Use LLM to disambiguate multiple candidates |
+| `ENTITY_LINKING_MIN_CANDIDATES_FOR_LLM` | No | `2` | Min candidates to trigger LLM disambiguation |
 
 ### GLiNER Configuration (Optional Feature)
 

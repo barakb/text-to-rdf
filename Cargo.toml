@@ -17,6 +17,7 @@ reqwest = { version = "0.12", features = ["json"] }
 url = "2.5"
 cached = { version = "0.53", features = ["async"] }
 oxigraph = "0.4"
+strsim = "0.11"  # Fuzzy string matching for entity disambiguation
 
 # GLiNER zero-shot NER (optional feature)
 gline-rs = { version = "1.0", optional = true }

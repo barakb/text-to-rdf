@@ -64,33 +64,32 @@ impl GenAiExtractor {
     fn build_request(&self, text: &str) -> ChatRequest {
         let system_msg = ChatMessage::system(self.get_system_prompt());
         let user_msg = ChatMessage::user(format!(
-            "Extract RDF entities and relations from the following text. Return only valid JSON-LD:\n\n{}",
-            text
+            "Extract RDF entities and relations from the following text. Return only valid JSON-LD:\n\n{text}"
         ));
 
         ChatRequest::new(vec![system_msg, user_msg])
     }
 
     /// Extract the JSON-LD content from the AI response
-    fn extract_json_from_response(&self, response: &str) -> Result<String> {
+    fn extract_json_from_response(response: &str) -> String {
         // Try to find JSON content between code fences
         if let Some(start) = response.find("```json") {
             let after_fence = start + 7; // Skip past "```json"
             if let Some(end_offset) = response[after_fence..].find("```") {
                 let json_end = after_fence + end_offset;
-                return Ok(response[after_fence..json_end].trim().to_string());
+                return response[after_fence..json_end].trim().to_string();
             }
         }
 
         // Try to find raw JSON by looking for { at the start
         if let Some(start) = response.find('{') {
             if let Some(end) = response.rfind('}') {
-                return Ok(response[start..=end].trim().to_string());
+                return response[start..=end].trim().to_string();
             }
         }
 
         // If no JSON found, return the whole response and let JSON parser handle it
-        Ok(response.trim().to_string())
+        response.trim().to_string()
     }
 }
 
@@ -117,7 +116,7 @@ impl RdfExtractor for GenAiExtractor {
             .ok_or_else(|| Error::AiService("Response is not text".to_string()))?;
 
         // Extract JSON from the response
-        let json_str = self.extract_json_from_response(content_text)?;
+        let json_str = Self::extract_json_from_response(content_text);
 
         // Parse as RDF document
         RdfDocument::from_json(&json_str)
@@ -138,7 +137,7 @@ mod tests {
     #[test]
     fn test_json_extraction_from_code_fence() {
         let config = ExtractionConfig::default();
-        let extractor = GenAiExtractor::new(config).unwrap();
+        let _extractor = GenAiExtractor::new(config).unwrap();
 
         let response = r#"Here's the extracted data:
 ```json
@@ -146,18 +145,18 @@ mod tests {
 ```
 Hope this helps!"#;
 
-        let json = extractor.extract_json_from_response(response).unwrap();
+        let json = GenAiExtractor::extract_json_from_response(response);
         assert!(json.contains("@context"));
     }
 
     #[test]
     fn test_json_extraction_raw() {
         let config = ExtractionConfig::default();
-        let extractor = GenAiExtractor::new(config).unwrap();
+        let _extractor = GenAiExtractor::new(config).unwrap();
 
         let response = r#"{"@context": "https://schema.org/", "@type": "Person"}"#;
 
-        let json = extractor.extract_json_from_response(response).unwrap();
+        let json = GenAiExtractor::extract_json_from_response(response);
         assert!(json.contains("@context"));
     }
 }
