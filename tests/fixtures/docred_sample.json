@@ -1,0 +1,135 @@
+[
+  {
+    "id": "docred_sample_1",
+    "title": "Marie Curie",
+    "sents": [
+      ["Marie", "Curie", "was", "a", "Polish", "and", "naturalized-French", "physicist", "and", "chemist", "."],
+      ["She", "was", "born", "in", "Warsaw", ",", "Poland", "in", "1867", "."],
+      ["Curie", "studied", "at", "the", "University", "of", "Paris", ",", "where", "she", "met", "Pierre", "Curie", "."],
+      ["She", "won", "the", "Nobel", "Prize", "in", "Physics", "in", "1903", "and", "the", "Nobel", "Prize", "in", "Chemistry", "in", "1911", "."]
+    ],
+    "vertexSet": [
+      [
+        {"name": "Marie Curie", "sent_id": 0, "pos": [0, 2], "type": "PER"},
+        {"name": "She", "sent_id": 1, "pos": [0, 1], "type": "PER"},
+        {"name": "Curie", "sent_id": 2, "pos": [0, 1], "type": "PER"},
+        {"name": "she", "sent_id": 2, "pos": [9, 10], "type": "PER"},
+        {"name": "She", "sent_id": 3, "pos": [0, 1], "type": "PER"}
+      ],
+      [
+        {"name": "Warsaw", "sent_id": 1, "pos": [4, 5], "type": "LOC"}
+      ],
+      [
+        {"name": "Poland", "sent_id": 1, "pos": [6, 7], "type": "LOC"}
+      ],
+      [
+        {"name": "University of Paris", "sent_id": 2, "pos": [4, 7], "type": "ORG"}
+      ],
+      [
+        {"name": "Pierre Curie", "sent_id": 2, "pos": [11, 13], "type": "PER"}
+      ]
+    ],
+    "labels": [
+      {"h": 0, "t": 1, "r": "P19", "evidence": [1]},
+      {"h": 0, "t": 2, "r": "P27", "evidence": [0, 1]},
+      {"h": 0, "t": 3, "r": "P69", "evidence": [2]},
+      {"h": 1, "t": 2, "r": "P17", "evidence": [1]}
+    ]
+  },
+  {
+    "id": "docred_sample_2",
+    "title": "Apple Inc.",
+    "sents": [
+      ["Apple", "Inc", ".", "is", "an", "American", "multinational", "technology", "company", "."],
+      ["It", "was", "founded", "by", "Steve", "Jobs", ",", "Steve", "Wozniak", ",", "and", "Ronald", "Wayne", "in", "1976", "."],
+      ["The", "company", "is", "headquartered", "in", "Cupertino", ",", "California", "."],
+      ["Steve", "Jobs", "served", "as", "CEO", "until", "his", "death", "in", "2011", "."],
+      ["Tim", "Cook", "became", "CEO", "in", "2011", "and", "leads", "the", "company", "from", "Cupertino", "."]
+    ],
+    "vertexSet": [
+      [
+        {"name": "Apple Inc.", "sent_id": 0, "pos": [0, 3], "type": "ORG"},
+        {"name": "It", "sent_id": 1, "pos": [0, 1], "type": "ORG"},
+        {"name": "The company", "sent_id": 2, "pos": [0, 2], "type": "ORG"},
+        {"name": "the company", "sent_id": 4, "pos": [8, 10], "type": "ORG"}
+      ],
+      [
+        {"name": "Steve Jobs", "sent_id": 1, "pos": [3, 5], "type": "PER"},
+        {"name": "Steve Jobs", "sent_id": 3, "pos": [0, 2], "type": "PER"}
+      ],
+      [
+        {"name": "Steve Wozniak", "sent_id": 1, "pos": [6, 8], "type": "PER"}
+      ],
+      [
+        {"name": "Ronald Wayne", "sent_id": 1, "pos": [10, 12], "type": "PER"}
+      ],
+      [
+        {"name": "Cupertino", "sent_id": 2, "pos": [5, 6], "type": "LOC"},
+        {"name": "Cupertino", "sent_id": 4, "pos": [11, 12], "type": "LOC"}
+      ],
+      [
+        {"name": "California", "sent_id": 2, "pos": [7, 8], "type": "LOC"}
+      ],
+      [
+        {"name": "Tim Cook", "sent_id": 4, "pos": [0, 2], "type": "PER"}
+      ]
+    ],
+    "labels": [
+      {"h": 0, "t": 4, "r": "P159", "evidence": [2]},
+      {"h": 0, "t": 5, "r": "P131", "evidence": [2]},
+      {"h": 4, "t": 5, "r": "P131", "evidence": [2]},
+      {"h": 1, "t": 0, "r": "P108", "evidence": [1, 3]},
+      {"h": 6, "t": 0, "r": "P108", "evidence": [4]}
+    ]
+  },
+  {
+    "id": "docred_sample_3",
+    "title": "Stanford University",
+    "sents": [
+      ["Stanford", "University", "is", "a", "private", "research", "university", "in", "Stanford", ",", "California", "."],
+      ["It", "was", "founded", "in", "1885", "by", "Leland", "Stanford", "."],
+      ["The", "university", "is", "located", "in", "the", "San", "Francisco", "Bay", "Area", "."],
+      ["Many", "notable", "alumni", "have", "graduated", "from", "Stanford", ",", "including", "Larry", "Page", "and", "Sergey", "Brin", "."],
+      ["Page", "and", "Brin", "founded", "Google", "while", "they", "were", "PhD", "students", "at", "the", "university", "."]
+    ],
+    "vertexSet": [
+      [
+        {"name": "Stanford University", "sent_id": 0, "pos": [0, 2], "type": "ORG"},
+        {"name": "It", "sent_id": 1, "pos": [0, 1], "type": "ORG"},
+        {"name": "The university", "sent_id": 2, "pos": [0, 2], "type": "ORG"},
+        {"name": "Stanford", "sent_id": 3, "pos": [6, 7], "type": "ORG"},
+        {"name": "the university", "sent_id": 4, "pos": [11, 13], "type": "ORG"}
+      ],
+      [
+        {"name": "Stanford", "sent_id": 0, "pos": [8, 9], "type": "LOC"}
+      ],
+      [
+        {"name": "California", "sent_id": 0, "pos": [10, 11], "type": "LOC"}
+      ],
+      [
+        {"name": "Leland Stanford", "sent_id": 1, "pos": [6, 8], "type": "PER"}
+      ],
+      [
+        {"name": "San Francisco Bay Area", "sent_id": 2, "pos": [6, 10], "type": "LOC"}
+      ],
+      [
+        {"name": "Larry Page", "sent_id": 3, "pos": [9, 11], "type": "PER"},
+        {"name": "Page", "sent_id": 4, "pos": [0, 1], "type": "PER"}
+      ],
+      [
+        {"name": "Sergey Brin", "sent_id": 3, "pos": [12, 14], "type": "PER"},
+        {"name": "Brin", "sent_id": 4, "pos": [2, 3], "type": "PER"}
+      ],
+      [
+        {"name": "Google", "sent_id": 4, "pos": [4, 5], "type": "ORG"}
+      ]
+    ],
+    "labels": [
+      {"h": 0, "t": 1, "r": "P276", "evidence": [0]},
+      {"h": 0, "t": 2, "r": "P131", "evidence": [0]},
+      {"h": 1, "t": 2, "r": "P131", "evidence": [0]},
+      {"h": 5, "t": 0, "r": "P69", "evidence": [3, 4]},
+      {"h": 6, "t": 0, "r": "P69", "evidence": [3, 4]}
+    ]
+  }
+]

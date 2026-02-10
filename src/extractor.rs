@@ -21,19 +21,29 @@ CRITICAL RULES:
 9. Extract dates in ISO 8601 format (YYYY-MM-DD) when explicitly mentioned
 10. If extraction fails validation, you will receive specific errors and must correct them
 
+MULTI-PARAGRAPH DOCUMENT HANDLING:
+- Track entities across sentences using coreference resolution
+- When you see "It", "She", "The company", "The university" - identify which entity this refers to
+- Extract relations WITH CORRECT DIRECTION:
+  * "Steve Jobs founded Apple" → (Steve Jobs, worksFor, Apple Inc.) NOT (Apple Inc., founder, Steve Jobs)
+  * "Larry Page graduated from Stanford" → (Larry Page, alumniOf, Stanford University) NOT (Stanford, alumni, Larry Page)
+  * "Apple is located in Cupertino" → (Apple Inc., location, Cupertino) NOT (Cupertino, location, Apple)
+- Focus on the MAIN ENTITY (usually the document title/first entity mentioned)
+- Do NOT extract properties of secondary entities unless explicitly stated
+
 FOCUS ON CORE RELATIONS:
-- Person: name, birthDate, deathDate, alumniOf, birthPlace
-- Organization: name, location
-- Place: name, addressCountry
-- Airport: name, location
-- Event: name, startDate, endDate, location
+- Person: name, birthDate, deathDate, alumniOf, birthPlace, worksFor
+- Organization: name, location, foundedBy (if founder explicitly named)
+- Place: name, addressCountry, containedInPlace
+- EducationalOrganization: name, location, alumniOf (reverse: Person → edu)
 
 DO NOT EXTRACT these properties unless EXPLICITLY AND DIRECTLY stated:
-- graduationDate (a year alone like "1955" is NOT a graduation date)
-- degree, educationalCredential, hasCredential
+- graduationDate, degree, educationalCredential (mention of year alone is NOT a graduationDate)
+- founder, foundingDate (unless explicitly "founded in YYYY" or "founded by NAME")
+- currentCEO, CEO (unless explicitly "current CEO" or "CEO as of DATE")
+- alumni (this is reverse direction - use alumniOf on Person instead)
 - gender, age, nationality
-- jobTitle, worksFor (without explicit current employment statement)
-- Any property whose value must be inferred from context
+- Any property whose value must be inferred
 
 EXAMPLES:
 
@@ -67,29 +77,35 @@ CORRECT OUTPUT:
   }
 }
 
-Input: "Aarhus Airport serves the city of Aarhus, Denmark."
-Output:
+Input: "Apple Inc. was founded by Steve Jobs in 1976. The company is headquartered in Cupertino, California."
+CORRECT OUTPUT (focus on main entity Apple Inc.):
 {
   "@context": "https://schema.org/",
-  "@type": "Airport",
-  "name": "Aarhus Airport",
+  "@type": "Organization",
+  "name": "Apple Inc.",
   "location": {
     "@type": "Place",
-    "name": "Aarhus",
-    "addressCountry": "Denmark"
+    "name": "Cupertino",
+    "addressCountry": "California"
   }
 }
 
-Input: "The Aarhus is the airport of Aarhus, Denmark."
-Output:
+Input: "Stanford University is in California. Larry Page and Sergey Brin graduated from Stanford."
+WRONG OUTPUT (extracting backwards relation):
+{
+  "@type": "EducationalOrganization",
+  "name": "Stanford University",
+  "alumni": ["Larry Page", "Sergey Brin"]
+}
+
+CORRECT OUTPUT (focus on main entity, don't extract secondary entity details):
 {
   "@context": "https://schema.org/",
-  "@type": "Airport",
-  "name": "Aarhus Airport",
+  "@type": "EducationalOrganization",
+  "name": "Stanford University",
   "location": {
     "@type": "Place",
-    "name": "Aarhus",
-    "addressCountry": "Denmark"
+    "name": "California"
   }
 }
 

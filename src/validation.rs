@@ -239,7 +239,10 @@ impl RdfValidator {
                                 confidence += impact;
                                 violations.push(Violation {
                                     rule: rule.name.clone(),
-                                    message: format!("SPARQL validation failed: {}", rule.description),
+                                    message: format!(
+                                        "SPARQL validation failed: {}",
+                                        rule.description
+                                    ),
                                     severity: Severity::Warning,
                                     property: None,
                                     confidence_impact: impact,
@@ -374,10 +377,7 @@ impl ValidationResult {
     /// Get total confidence impact from all violations
     #[must_use]
     pub fn total_confidence_impact(&self) -> f64 {
-        self.violations
-            .iter()
-            .map(|v| v.confidence_impact)
-            .sum()
+        self.violations.iter().map(|v| v.confidence_impact).sum()
     }
 }
 

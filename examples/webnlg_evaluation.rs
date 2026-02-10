@@ -216,12 +216,14 @@ fn print_test_case_report(
     println!("Input Text: \"{}\"", test_case.raw_text);
 
     println!("\n📊 Metrics:");
-    println!("  Precision:        {:.2}% ({}/{})",
+    println!(
+        "  Precision:        {:.2}% ({}/{})",
         metrics.precision * 100.0,
         metrics.true_positives,
         predicted.len()
     );
-    println!("  Recall:           {:.2}% ({}/{})",
+    println!(
+        "  Recall:           {:.2}% ({}/{})",
         metrics.recall * 100.0,
         metrics.true_positives,
         expected.len()
@@ -233,25 +235,40 @@ fn print_test_case_report(
     if !true_positives.is_empty() {
         println!("\n✓ True Positives ({}):", true_positives.len());
         for triple in true_positives {
-            println!("  ({}, {}, {})", triple.subject, triple.predicate, triple.object);
+            println!(
+                "  ({}, {}, {})",
+                triple.subject, triple.predicate, triple.object
+            );
         }
     }
 
     // False Positives
     let false_positives: Vec<_> = predicted.difference(expected).collect();
     if !false_positives.is_empty() {
-        println!("\n✗ False Positives ({}) - Extracted but not in gold standard:", false_positives.len());
+        println!(
+            "\n✗ False Positives ({}) - Extracted but not in gold standard:",
+            false_positives.len()
+        );
         for triple in false_positives {
-            println!("  ({}, {}, {})", triple.subject, triple.predicate, triple.object);
+            println!(
+                "  ({}, {}, {})",
+                triple.subject, triple.predicate, triple.object
+            );
         }
     }
 
     // False Negatives
     let false_negatives: Vec<_> = expected.difference(predicted).collect();
     if !false_negatives.is_empty() {
-        println!("\n✗ False Negatives ({}) - In gold standard but not extracted:", false_negatives.len());
+        println!(
+            "\n✗ False Negatives ({}) - In gold standard but not extracted:",
+            false_negatives.len()
+        );
         for triple in false_negatives {
-            println!("  ({}, {}, {})", triple.subject, triple.predicate, triple.object);
+            println!(
+                "  ({}, {}, {})",
+                triple.subject, triple.predicate, triple.object
+            );
         }
     }
 }
@@ -265,9 +282,18 @@ fn print_summary_report(aggregate: &AggregateMetrics) {
 
     println!("\n📈 Overall Performance:");
     println!("  Total Test Cases:    {}", aggregate.total_cases);
-    println!("  Average Precision:   {:.2}%", aggregate.avg_precision * 100.0);
-    println!("  Average Recall:      {:.2}%", aggregate.avg_recall * 100.0);
-    println!("  Average F1 Score:    {:.2}%", aggregate.avg_f1_score * 100.0);
+    println!(
+        "  Average Precision:   {:.2}%",
+        aggregate.avg_precision * 100.0
+    );
+    println!(
+        "  Average Recall:      {:.2}%",
+        aggregate.avg_recall * 100.0
+    );
+    println!(
+        "  Average F1 Score:    {:.2}%",
+        aggregate.avg_f1_score * 100.0
+    );
 
     println!("\n🎯 Triple Statistics:");
     println!("  True Positives:      {}", aggregate.total_tp);
@@ -339,7 +365,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let contents = fs::read_to_string(test_cases_path)?;
     let test_cases: Vec<TestCase> = serde_json::from_str(&contents)?;
 
-    println!("✓ Loaded {} test cases from WebNLG dataset", test_cases.len());
+    println!(
+        "✓ Loaded {} test cases from WebNLG dataset",
+        test_cases.len()
+    );
 
     // Create extractor
     let extractor = GenAiExtractor::new(config)?;
@@ -348,7 +377,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut all_metrics = Vec::new();
 
     for (idx, test_case) in test_cases.iter().enumerate() {
-        println!("\n\n[{}/{}] Processing: {}", idx + 1, test_cases.len(), test_case.id);
+        println!(
+            "\n\n[{}/{}] Processing: {}",
+            idx + 1,
+            test_cases.len(),
+            test_case.id
+        );
         println!("Input: \"{}\"", test_case.raw_text);
 
         // Extract RDF from text
@@ -367,18 +401,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Debug: Show what was extracted
         if std::env::var("WEBNLG_DEBUG").is_ok() {
             println!("\n🔍 Debug - Extracted JSON-LD:");
-            println!("{}", serde_json::to_string_pretty(&result.data).unwrap_or_default());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&result.data).unwrap_or_default()
+            );
         }
 
         // Extract triples from predicted and expected JSON-LD
         let predicted_triples = extract_triples_from_jsonld(&result.data);
-        let expected_triples: HashSet<Triple> = test_case.expected_triples.iter().cloned().collect();
+        let expected_triples: HashSet<Triple> =
+            test_case.expected_triples.iter().cloned().collect();
 
         // Calculate metrics
         let metrics = EvaluationMetrics::new(&predicted_triples, &expected_triples);
 
         // Print quick summary
-        println!("F1: {:.2}% | P: {:.2}% | R: {:.2}%",
+        println!(
+            "F1: {:.2}% | P: {:.2}% | R: {:.2}%",
             metrics.f1_score * 100.0,
             metrics.precision * 100.0,
             metrics.recall * 100.0
