@@ -6,6 +6,7 @@ use genai::Client;
 
 use crate::chunking::{DocumentChunk, SemanticChunker};
 use crate::coref::{CorefConfig, CorefResolver};
+use crate::entity_linker::EntityLinker;
 use crate::knowledge_buffer::KnowledgeBuffer;
 use crate::{Error, ExtractionConfig, RdfDocument, RdfExtractor, Result};
 
@@ -120,6 +121,7 @@ pub struct GenAiExtractor {
     client: Client,
     config: ExtractionConfig,
     coref_resolver: CorefResolver,
+    entity_linker: Option<EntityLinker>,
 }
 
 impl GenAiExtractor {
@@ -135,10 +137,18 @@ impl GenAiExtractor {
         let coref_config = CorefConfig::from_env()?;
         let coref_resolver = CorefResolver::new(coref_config)?;
 
+        // Initialize entity linker if enabled
+        let entity_linker = if config.entity_linker.enabled {
+            Some(EntityLinker::new(config.entity_linker.clone())?)
+        } else {
+            None
+        };
+
         Ok(Self {
             client,
             config,
             coref_resolver,
+            entity_linker,
         })
     }
 
@@ -301,6 +311,115 @@ impl GenAiExtractor {
     const fn estimate_tokens(text: &str) -> usize {
         // Rough approximation: 1 token ≈ 4 characters for English
         text.len() / 4
+    }
+
+    /// Link entities in extracted document to canonical URIs
+    async fn link_entities_in_document(&self, doc: &mut RdfDocument, text: &str) -> Result<()> {
+        // Skip if no linker configured
+        let Some(linker) = &self.entity_linker else {
+            return Ok(());
+        };
+
+        // Extract entity names from JSON-LD
+        let entity_names = Self::extract_entity_names(&doc.data);
+        if entity_names.is_empty() {
+            return Ok(());
+        }
+
+        // Debug logging
+        if std::env::var("DEBUG_ENTITY_LINKING").is_ok() {
+            println!("    🔗 Linking {} entities...", entity_names.len());
+        }
+
+        // Batch link all entities
+        match linker.link_entities(text, &entity_names).await {
+            Ok(linked_results) => {
+                let mut linked_count = 0;
+                for (name, maybe_linked) in entity_names.iter().zip(linked_results.iter()) {
+                    if let Some(linked) = maybe_linked {
+                        // Enrich document with URI by finding entity and setting @id
+                        Self::enrich_entity_with_uri(&mut doc.data, name, &linked.uri);
+                        linked_count += 1;
+
+                        // Debug logging
+                        if std::env::var("DEBUG_ENTITY_LINKING").is_ok() {
+                            println!(
+                                "       {} → {} (confidence: {:.2})",
+                                name, linked.uri, linked.confidence
+                            );
+                        }
+                    }
+                }
+
+                if std::env::var("DEBUG_ENTITY_LINKING").is_ok() {
+                    println!(
+                        "    🔗 Linked {}/{} entities successfully",
+                        linked_count,
+                        entity_names.len()
+                    );
+                }
+            }
+            Err(e) => {
+                eprintln!("  ⚠️  Entity linking failed: {e}. Continuing without URIs.");
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Extract entity names from JSON-LD data
+    fn extract_entity_names(value: &serde_json::Value) -> Vec<String> {
+        let mut names = Vec::new();
+        Self::extract_names_recursive(value, &mut names);
+        names.sort();
+        names.dedup();
+        names
+    }
+
+    /// Recursively extract names from JSON-LD structure
+    fn extract_names_recursive(value: &serde_json::Value, names: &mut Vec<String>) {
+        match value {
+            serde_json::Value::Object(map) => {
+                if let Some(name) = map.get("name").and_then(|v| v.as_str()) {
+                    names.push(name.to_string());
+                }
+                for v in map.values() {
+                    Self::extract_names_recursive(v, names);
+                }
+            }
+            serde_json::Value::Array(arr) => {
+                for v in arr {
+                    Self::extract_names_recursive(v, names);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Enrich a specific entity with a canonical URI
+    fn enrich_entity_with_uri(value: &mut serde_json::Value, entity_name: &str, uri: &str) {
+        match value {
+            serde_json::Value::Object(map) => {
+                // Check if this entity matches the name
+                if let Some(name) = map.get("name").and_then(|v| v.as_str()) {
+                    if name == entity_name {
+                        // Add or update @id field
+                        map.insert("@id".to_string(), serde_json::json!(uri));
+                        return;
+                    }
+                }
+                // Recurse into all values
+                for v in map.values_mut() {
+                    Self::enrich_entity_with_uri(v, entity_name, uri);
+                }
+            }
+            serde_json::Value::Array(arr) => {
+                for v in arr {
+                    Self::enrich_entity_with_uri(v, entity_name, uri);
+                }
+            }
+            _ => {}
+        }
     }
 
     /// Build a context-enriched prompt with knowledge buffer
@@ -517,8 +636,16 @@ impl GenAiExtractor {
 
             // Extract from resolved chunk
             match self.extract_from_chunk(&resolved_chunk, &kb).await {
-                Ok(chunk_doc) => {
-                    // Update KB with discovered entities
+                Ok(mut chunk_doc) => {
+                    // Link entities before updating KB
+                    if let Err(e) = self
+                        .link_entities_in_document(&mut chunk_doc, &resolved_chunk.text)
+                        .await
+                    {
+                        eprintln!("  ⚠️  Chunk {} entity linking failed: {}", idx + 1, e);
+                    }
+
+                    // Update KB with discovered entities (with URIs if linked)
                     if let Some(obj) = chunk_doc.data.as_object() {
                         if let (Some(entity_type), Some(entity_name)) = (
                             obj.get("@type").and_then(|v| v.as_str()),
@@ -530,6 +657,11 @@ impl GenAiExtractor {
                                 resolved_chunk.start_offset,
                                 resolved_chunk.id,
                             );
+
+                            // Add canonical URI to KB if linked
+                            if let Some(id) = obj.get("@id").and_then(|v| v.as_str()) {
+                                kb.add_property(entity_name, "@id", id);
+                            }
                         }
                     }
                     all_docs.push(chunk_doc);
@@ -567,7 +699,13 @@ impl RdfExtractor for GenAiExtractor {
         };
 
         // Use the Instructor pattern with retry logic on resolved text
-        self.extract_with_retry(&resolved_text).await
+        let mut result = self.extract_with_retry(&resolved_text).await?;
+
+        // Link entities to canonical URIs
+        self.link_entities_in_document(&mut result, &resolved_text)
+            .await?;
+
+        Ok(result)
     }
 }
 
