@@ -5,6 +5,7 @@ use genai::chat::{ChatMessage, ChatRequest};
 use genai::Client;
 
 use crate::chunking::{DocumentChunk, SemanticChunker};
+use crate::coref::{CorefConfig, CorefResolver};
 use crate::knowledge_buffer::KnowledgeBuffer;
 use crate::{Error, ExtractionConfig, RdfDocument, RdfExtractor, Result};
 
@@ -118,6 +119,7 @@ Return ONLY the JSON-LD, no commentary or explanations.
 pub struct GenAiExtractor {
     client: Client,
     config: ExtractionConfig,
+    coref_resolver: CorefResolver,
 }
 
 impl GenAiExtractor {
@@ -129,7 +131,15 @@ impl GenAiExtractor {
     pub fn new(config: ExtractionConfig) -> Result<Self> {
         let client = Client::default();
 
-        Ok(Self { client, config })
+        // Initialize coreference resolver from environment
+        let coref_config = CorefConfig::from_env()?;
+        let coref_resolver = CorefResolver::new(coref_config)?;
+
+        Ok(Self {
+            client,
+            config,
+            coref_resolver,
+        })
     }
 
     /// Get the system prompt for extraction
@@ -375,27 +385,42 @@ impl GenAiExtractor {
         // Use context from first document
         let context = docs[0].context.clone();
 
-        let mut merged_data = serde_json::json!({});
+        // Collect all entities in a @graph array
+        let mut graph = Vec::new();
 
-        // Collect all data from chunks
         for doc in docs {
             if let Some(obj) = doc.data.as_object() {
-                if let Some(merged_obj) = merged_data.as_object_mut() {
+                // Check if this document has a @graph key
+                if let Some(graph_array) = obj.get("@graph").and_then(|v| v.as_array()) {
+                    // Add all entities from the graph
+                    graph.extend(graph_array.iter().cloned());
+                } else if !obj.is_empty() {
+                    // This is a single entity - create a clean copy without @context
+                    let mut entity = serde_json::Map::new();
                     for (key, value) in obj {
-                        // Skip @context since we handle it separately
-                        if key == "@context" {
-                            continue;
+                        if key != "@context" {
+                            entity.insert(key.clone(), value.clone());
                         }
-
-                        // For primitive values, keep first occurrence
-                        // For arrays and objects, we could implement smarter merging
-                        if !merged_obj.contains_key(key) {
-                            merged_obj.insert(key.clone(), value.clone());
-                        }
+                    }
+                    if !entity.is_empty() {
+                        graph.push(serde_json::json!(entity));
                     }
                 }
             }
         }
+
+        // Create merged document with @graph
+        let merged_data = if graph.is_empty() {
+            serde_json::json!({})
+        } else if graph.len() == 1 {
+            // If only one entity, return it directly (no @graph wrapper)
+            graph.pop().unwrap()
+        } else {
+            // Multiple entities, use @graph
+            serde_json::json!({
+                "@graph": graph
+            })
+        };
 
         RdfDocument {
             context,
@@ -454,24 +479,63 @@ impl GenAiExtractor {
         for (idx, chunk) in chunks.iter().enumerate() {
             println!("  Processing chunk {}/{}", idx + 1, chunks.len());
 
-            match self.extract_from_chunk(chunk, &kb).await {
+            // Apply coreference resolution BEFORE extraction
+            let resolved_chunk = match self.coref_resolver.resolve(&chunk.text).await {
+                Ok(coref_result) => {
+                    // Enrich KB with pronoun→entity mappings
+                    for (pronoun, entity) in &coref_result.mention_map {
+                        kb.add_alias(pronoun, entity);
+                    }
+
+                    // Debug logging
+                    if std::env::var("DEBUG_COREF").is_ok() && !coref_result.mention_map.is_empty()
+                    {
+                        println!(
+                            "    🔍 Coref: {} pronouns resolved",
+                            coref_result.mention_map.len()
+                        );
+                    }
+
+                    // Create chunk with resolved text, preserving original offsets
+                    DocumentChunk {
+                        id: chunk.id,
+                        text: coref_result.resolved_text,
+                        start_offset: chunk.start_offset,
+                        end_offset: chunk.end_offset,
+                        entities_mentioned: chunk.entities_mentioned.clone(),
+                    }
+                }
+                Err(e) => {
+                    eprintln!(
+                        "  ⚠️  Coref failed for chunk {}: {}. Using original text.",
+                        idx + 1,
+                        e
+                    );
+                    chunk.clone()
+                }
+            };
+
+            // Extract from resolved chunk
+            match self.extract_from_chunk(&resolved_chunk, &kb).await {
                 Ok(chunk_doc) => {
-                    // Update knowledge buffer with discovered entities from JSON data
+                    // Update KB with discovered entities
                     if let Some(obj) = chunk_doc.data.as_object() {
-                        // Extract entity type and name from the data
                         if let (Some(entity_type), Some(entity_name)) = (
                             obj.get("@type").and_then(|v| v.as_str()),
                             obj.get("name").and_then(|v| v.as_str()),
                         ) {
-                            kb.add_entity(entity_name, entity_type, chunk.start_offset, chunk.id);
+                            kb.add_entity(
+                                entity_name,
+                                entity_type,
+                                resolved_chunk.start_offset,
+                                resolved_chunk.id,
+                            );
                         }
                     }
-
                     all_docs.push(chunk_doc);
                 }
                 Err(e) => {
                     eprintln!("  ⚠️  Chunk {} extraction failed: {}", idx + 1, e);
-                    // Continue processing other chunks
                 }
             }
         }
@@ -485,8 +549,25 @@ impl GenAiExtractor {
 #[async_trait]
 impl RdfExtractor for GenAiExtractor {
     async fn extract(&self, text: &str) -> Result<RdfDocument> {
-        // Use the Instructor pattern with retry logic
-        self.extract_with_retry(text).await
+        // Apply coreference resolution for short documents too
+        let resolved_text = match self.coref_resolver.resolve(text).await {
+            Ok(coref_result) => {
+                if std::env::var("DEBUG_COREF").is_ok() && !coref_result.mention_map.is_empty() {
+                    println!(
+                        "🔍 Coref: {} pronouns resolved in short document",
+                        coref_result.mention_map.len()
+                    );
+                }
+                coref_result.resolved_text
+            }
+            Err(e) => {
+                eprintln!("⚠️  Coref resolution failed: {e}. Using original text.");
+                text.to_string()
+            }
+        };
+
+        // Use the Instructor pattern with retry logic on resolved text
+        self.extract_with_retry(&resolved_text).await
     }
 }
 

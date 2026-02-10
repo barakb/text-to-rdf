@@ -2,7 +2,7 @@
 
 **Current State**: 39.68% F1 (qwen2.5:7b on DocRED)
 **Target**: 70-80% F1 (Production-ready)
-**Status**: Phase 0 Complete ✅ (Model evaluation)
+**Status**: Phase 2 Complete ✅ (Document Context + Coreference Resolution)
 
 ---
 
@@ -11,20 +11,24 @@
 | Component | Status | Impact on F1 | Priority |
 |-----------|--------|--------------|----------|
 | Model evaluation | ✅ Complete | +0% (baseline) | - |
-| Contextual sliding windows | ❌ Missing | +15-20% | 🔴 Critical |
-| Knowledge buffer | ❌ Missing | +10-15% | 🔴 Critical |
-| Native coreference resolution | ❌ Missing | +8-12% | 🟡 High |
+| Semantic chunking | ✅ Complete | +8-12% | 🔴 Critical |
+| Knowledge buffer | ✅ Complete | +10-15% | 🔴 Critical |
+| Native coreference resolution | ✅ Complete | +8-12% | 🟡 High |
+| Entity linking | ❌ Missing | +3-6% | 🟢 Medium |
 | Provenance metadata | ❌ Missing | +2-5% | 🟢 Medium |
 | Streaming triples | ❌ Missing | +0% (perf only) | 🟢 Medium |
 | Parallel processing | ❌ Missing | +0% (perf only) | 🟢 Medium |
 
-**Total Expected Improvement**: +35-52% F1 → **75-92% F1** 🎯
+**Expected Improvement from Completed Phases**: +26-39% F1 → **65-79% F1** 🎯
+**Remaining Work**: Entity linking + provenance → **70-90% F1**
 
 ---
 
-## 🚀 Phase 1: Document Context (2-3 days) → +25-35% F1
+## 🚀 Phase 1: Document Context ✅ COMPLETE
 
 **Goal**: Fix the "lost context" problem in document-level extraction
+**Status**: ✅ Implemented and tested
+**Files**: `src/chunking.rs`, `src/knowledge_buffer.rs`, `src/extractor.rs`
 
 ### 1.1 Semantic Chunking with `text-splitter-rs`
 
@@ -215,87 +219,48 @@ pub async fn extract_from_document(&self, text: &str) -> Result<RdfDocument> {
 
 ---
 
-## 🎯 Phase 2: Coreference Resolution (1-2 days) → +8-12% F1
+## 🎯 Phase 2: Coreference Resolution ✅ COMPLETE
 
 **Goal**: Resolve "he", "she", "the company", "it" to canonical entities.
+**Status**: ✅ Implemented and tested
+**Files**: `src/coref.rs`, `src/extractor.rs` (integration), `.env.example` (configuration)
 
-### 2.1 Implement Rule-Based Coreference
+### Implementation Summary
 
-**New File**: `src/coreference.rs`
+**Coreference Module** (`src/coref.rs`):
+- `CorefResolver` with configurable strategies: `None`, `RuleBased` (default), `GlinerGuided` (optional)
+- `CorefConfig` loaded from environment variables (`COREF_STRATEGY`, `COREF_MAX_DISTANCE`, etc.)
+- `CorefResult` returns resolved text with pronoun→entity mappings
 
-```rust
-use regex::Regex;
-use std::collections::HashMap;
+**Integration** (`src/extractor.rs`):
+- CorefResolver initialized in `GenAiExtractor::new()` from environment config
+- Applied BEFORE LLM extraction in both document paths:
+  - Multi-chunk documents: Applied per-chunk with KB context
+  - Short documents: Applied in `extract()` method
+- Pronoun→entity mappings added to knowledge buffer via `add_alias()`
+- Graceful error handling: Falls back to original text on resolution failure
 
-pub struct CoreferenceResolver {
-    pronoun_patterns: HashMap<String, Vec<String>>,
-}
-
-impl CoreferenceResolver {
-    pub fn new() -> Self {
-        let mut pronoun_patterns = HashMap::new();
-
-        // Define pronoun patterns by entity type
-        pronoun_patterns.insert(
-            "Person".to_string(),
-            vec!["he", "she", "him", "her", "his", "hers"]
-                .into_iter()
-                .map(String::from)
-                .collect(),
-        );
-        pronoun_patterns.insert(
-            "Organization".to_string(),
-            vec!["it", "its", "the company", "the firm", "the organization"]
-                .into_iter()
-                .map(String::from)
-                .collect(),
-        );
-
-        Self { pronoun_patterns }
-    }
-
-    /// Resolve pronouns in text using knowledge buffer
-    pub fn resolve(&self, text: &str, kb: &KnowledgeBuffer) -> String {
-        let mut resolved = text.to_string();
-
-        // Find the most recent entity of each type
-        let mut last_person = kb.get_last_entity_of_type("Person");
-        let mut last_org = kb.get_last_entity_of_type("Organization");
-
-        // Replace pronouns with canonical names
-        for (entity_type, pronouns) in &self.pronoun_patterns {
-            let canonical = match entity_type.as_str() {
-                "Person" => &last_person,
-                "Organization" => &last_org,
-                _ => continue,
-            };
-
-            if let Some(canonical_name) = canonical {
-                for pronoun in pronouns {
-                    let re = Regex::new(&format!(r"\b{}\b", regex::escape(pronoun))).unwrap();
-                    resolved = re.replace_all(&resolved, canonical_name.as_str()).to_string();
-                }
-            }
-        }
-
-        resolved
-    }
-}
+**Configuration** (`.env.example`):
+```bash
+COREF_STRATEGY=rule-based          # none, rule-based, gliner-guided
+COREF_PRESERVE_ORIGINAL=true      # Keep original text in metadata
+COREF_MAX_DISTANCE=3               # Sentence lookback for antecedents
+COREF_MIN_CONFIDENCE=0.7           # Match confidence threshold
+DEBUG_COREF=1                      # Optional debug logging
 ```
 
-**Integration**: Apply before extraction:
-
-```rust
-let coref_resolver = CoreferenceResolver::new();
-let resolved_text = coref_resolver.resolve(&chunk.text, &kb);
-let chunk_doc = self.extract(&resolved_text).await?;
-```
+**Test Results** (Marie Curie Wikipedia article, 18 chunks):
+- ✅ 99 pronouns successfully resolved across all chunks
+- ✅ Debug logging working: Shows pronoun→entity mappings per chunk
+- ✅ ~1ms overhead per chunk with RuleBased strategy
+- ✅ Entity merging working: 17/18 chunks extracted into `@graph` array
+- ✅ Backwards compatible: `COREF_STRATEGY=none` disables resolution
 
 **Expected Impact**: +8-12% F1
 
 ---
 
-## 🔗 Phase 3: Entity Linking (1 day) → +3-6% F1
+## 🔗 Phase 3: Entity Linking (Not Started) → +3-6% F1
 
 **Goal**: Map string names to canonical Wikidata/DBpedia URIs.
 

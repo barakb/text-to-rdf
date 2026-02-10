@@ -34,6 +34,7 @@ use async_trait::async_trait;
 use std::env;
 
 pub mod chunking;
+pub mod coref;
 pub mod entity_linker;
 pub mod error;
 pub mod extractor;
@@ -44,6 +45,7 @@ pub mod types;
 pub mod validation;
 
 pub use chunking::{DocumentChunk, SemanticChunker};
+pub use coref::{CorefCluster, CorefConfig, CorefResolver, CorefResult, CorefStrategy};
 pub use entity_linker::{EntityLinker, EntityLinkerConfig, LinkedEntity, LinkingStrategy};
 pub use error::{Error, Result};
 pub use extractor::GenAiExtractor;

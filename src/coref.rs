@@ -34,17 +34,24 @@
 //!    - Good for simple documents with clear structure
 //!    - ~1ms per document
 //!
-//! 2. **GLiNER-Guided** (Recommended with GLiNER feature)
-//!    - Uses GLiNER entity extraction to guide resolution
+//! 2. **GLiNER-Guided** (Recommended with `GLiNER` feature)
+//!    - Uses `GLiNER` entity extraction to guide resolution
 //!    - Resolves pronouns to nearest matching entity
 //!    - Very accurate for well-formed text
-//!    - ~50ms per document (includes GLiNER)
+//!    - ~50ms per document (includes `GLiNER`)
 //!
 //! 3. **None** (Disabled)
 //!    - No coreference resolution
 //!    - Pass-through mode
 
-use crate::error::{Error, Result};
+#![allow(clippy::missing_errors_doc)]
+#![allow(clippy::missing_const_for_fn)]
+#![allow(clippy::unnecessary_wraps)]
+#![allow(clippy::double_ended_iterator_last)]
+#![allow(clippy::needless_collect)]
+#![allow(clippy::unused_async)]
+
+use crate::error::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -470,9 +477,8 @@ fn is_proper_noun_start(word: &str) -> bool {
     }
 
     let first_char = word.chars().next().unwrap();
-    first_char.is_uppercase()
-        && word.len() > 1
-        && !word.chars().nth(1).unwrap().is_uppercase() // Ignore all-caps words
+    first_char.is_uppercase() && word.len() > 1 && !word.chars().nth(1).unwrap().is_uppercase()
+    // Ignore all-caps words
 }
 
 /// Check if a word is part of a proper noun
@@ -482,7 +488,11 @@ fn is_proper_noun(word: &str) -> bool {
     }
 
     let first_char = word.chars().next().unwrap();
-    first_char.is_uppercase() && word.chars().skip(1).all(|c| c.is_lowercase() || !c.is_alphabetic())
+    first_char.is_uppercase()
+        && word
+            .chars()
+            .skip(1)
+            .all(|c| c.is_lowercase() || !c.is_alphabetic())
 }
 
 /// Pronoun classification
@@ -496,7 +506,10 @@ enum PronounType {
 
 /// Classify a pronoun by type
 fn classify_pronoun(word: &str) -> Option<PronounType> {
-    match word.to_lowercase().trim_matches(|c: char| !c.is_alphabetic()) {
+    match word
+        .to_lowercase()
+        .trim_matches(|c: char| !c.is_alphabetic())
+    {
         "he" | "him" | "his" | "himself" => Some(PronounType::Masculine),
         "she" | "her" | "hers" | "herself" => Some(PronounType::Feminine),
         "it" | "its" | "itself" => Some(PronounType::Neutral),
