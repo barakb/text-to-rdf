@@ -4,6 +4,8 @@ use async_trait::async_trait;
 use genai::chat::{ChatMessage, ChatRequest};
 use genai::Client;
 
+use crate::chunking::{DocumentChunk, SemanticChunker};
+use crate::knowledge_buffer::KnowledgeBuffer;
 use crate::{Error, ExtractionConfig, RdfDocument, RdfExtractor, Result};
 
 /// Default system prompt for RDF extraction
@@ -283,6 +285,201 @@ impl GenAiExtractor {
 
         // This should never be reached due to the check above, but return the last error just in case
         Err(last_error.unwrap_or_else(|| Error::Extraction("Unknown error".to_string())))
+    }
+
+    /// Estimate the number of tokens in text (rough approximation)
+    fn estimate_tokens(&self, text: &str) -> usize {
+        // Rough approximation: 1 token ≈ 4 characters for English
+        text.len() / 4
+    }
+
+    /// Build a context-enriched prompt with knowledge buffer
+    fn build_context_prompt(&self, kb: &KnowledgeBuffer) -> String {
+        let base_prompt = self.get_system_prompt();
+
+        if kb.entity_count() == 0 {
+            return base_prompt.to_string();
+        }
+
+        let context_summary = kb.get_context_summary();
+
+        format!(
+            "{}\n\n===== DOCUMENT CONTEXT =====\n{}\
+            ===== END CONTEXT =====\n\n\
+            Use this context to resolve pronouns and entity references in the text below.",
+            base_prompt, context_summary
+        )
+    }
+
+    /// Extract from a single chunk with context
+    async fn extract_from_chunk(
+        &self,
+        chunk: &DocumentChunk,
+        kb: &KnowledgeBuffer,
+    ) -> Result<RdfDocument> {
+        // Build context-enriched prompt
+        let context_prompt = self.build_context_prompt(kb);
+
+        // Create conversation with context
+        let mut conversation = vec![ChatMessage::system(context_prompt)];
+
+        let user_message = format!(
+            "Extract RDF entities and relations from the following text section. \
+            Return only valid JSON-LD:\n\n{}",
+            chunk.text
+        );
+
+        conversation.push(ChatMessage::user(user_message));
+
+        // Execute the chat request
+        let request = ChatRequest::new(conversation);
+        let response = self
+            .client
+            .exec_chat(&self.config.model, request, None)
+            .await
+            .map_err(|e| Error::AiService(e.to_string()))?;
+
+        // Get the response content
+        let content_text = response
+            .first_text()
+            .ok_or_else(|| Error::AiService("Empty response from AI service".to_string()))?;
+
+        // Extract JSON from the response
+        let json_str = Self::extract_json_from_response(content_text);
+
+        // Parse and validate
+        let mut doc = RdfDocument::from_json(&json_str)?;
+
+        // Inject hardcoded context if enabled
+        if self.config.inject_hardcoded_context {
+            doc.inject_hardcoded_context()?;
+        }
+
+        // Validate if strict validation is enabled
+        if self.config.strict_validation {
+            doc.validate()?;
+        }
+
+        Ok(doc)
+    }
+
+    /// Merge documents from multiple chunks, deduplicating entities and triples
+    fn merge_chunks(&self, docs: Vec<RdfDocument>) -> RdfDocument {
+        if docs.is_empty() {
+            // Return empty document with schema.org context
+            return RdfDocument {
+                context: serde_json::json!("https://schema.org/"),
+                data: serde_json::json!({}),
+            };
+        }
+
+        // Use context from first document
+        let context = docs[0].context.clone();
+
+        let mut merged_data = serde_json::json!({});
+
+        // Collect all data from chunks
+        for doc in docs {
+            if let Some(obj) = doc.data.as_object() {
+                if let Some(merged_obj) = merged_data.as_object_mut() {
+                    for (key, value) in obj {
+                        // Skip @context since we handle it separately
+                        if key == "@context" {
+                            continue;
+                        }
+
+                        // For primitive values, keep first occurrence
+                        // For arrays and objects, we could implement smarter merging
+                        if !merged_obj.contains_key(key) {
+                            merged_obj.insert(key.clone(), value.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        RdfDocument {
+            context,
+            data: merged_data,
+        }
+    }
+
+    /// Extract from a long document using chunking and knowledge buffer
+    ///
+    /// This method implements document-level extraction with context preservation:
+    /// 1. Checks if the document needs chunking (> 2000 tokens)
+    /// 2. Splits into semantic chunks if needed
+    /// 3. Tracks entities across chunks using a knowledge buffer
+    /// 4. Processes chunks sequentially to maintain context
+    /// 5. Merges results and deduplicates
+    ///
+    /// # Arguments
+    /// * `text` - The full document text
+    ///
+    /// # Returns
+    /// A merged RdfDocument containing all extracted entities and relations
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if extraction fails
+    pub async fn extract_from_document(&self, text: &str) -> Result<RdfDocument> {
+        // 1. Check if document needs chunking
+        let token_count = self.estimate_tokens(text);
+
+        // Use configurable threshold (default 2000, can be set lower for testing)
+        let chunk_threshold = std::env::var("RDF_CHUNK_THRESHOLD")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or(2000);
+
+        if token_count < chunk_threshold {
+            // Short document - extract normally
+            return self.extract(text).await;
+        }
+
+        // 2. Semantic chunking
+        let chunker = SemanticChunker::default();
+        let chunks = chunker.chunk(text);
+
+        println!(
+            "📊 Document is {} tokens, splitting into {} chunks",
+            token_count,
+            chunks.len()
+        );
+
+        // 3. Knowledge buffer for entity tracking
+        let mut kb = KnowledgeBuffer::new();
+        let mut all_docs = Vec::new();
+
+        // 4. Process chunks sequentially (preserve order for coreference)
+        for (idx, chunk) in chunks.iter().enumerate() {
+            println!("  Processing chunk {}/{}", idx + 1, chunks.len());
+
+            match self.extract_from_chunk(chunk, &kb).await {
+                Ok(chunk_doc) => {
+                    // Update knowledge buffer with discovered entities from JSON data
+                    if let Some(obj) = chunk_doc.data.as_object() {
+                        // Extract entity type and name from the data
+                        if let (Some(entity_type), Some(entity_name)) = (
+                            obj.get("@type").and_then(|v| v.as_str()),
+                            obj.get("name").and_then(|v| v.as_str()),
+                        ) {
+                            kb.add_entity(entity_name, entity_type, chunk.start_offset, chunk.id);
+                        }
+                    }
+
+                    all_docs.push(chunk_doc);
+                }
+                Err(e) => {
+                    eprintln!("  ⚠️  Chunk {} extraction failed: {}", idx + 1, e);
+                    // Continue processing other chunks
+                }
+            }
+        }
+
+        // 5. Merge and deduplicate
+        println!("  Merging {} chunks", all_docs.len());
+        Ok(self.merge_chunks(all_docs))
     }
 }
 

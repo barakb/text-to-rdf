@@ -33,17 +33,21 @@
 use async_trait::async_trait;
 use std::env;
 
+pub mod chunking;
 pub mod entity_linker;
 pub mod error;
 pub mod extractor;
 pub mod gliner_extractor;
+pub mod knowledge_buffer;
 pub mod normalize;
 pub mod types;
 pub mod validation;
 
+pub use chunking::{DocumentChunk, SemanticChunker};
 pub use entity_linker::{EntityLinker, EntityLinkerConfig, LinkedEntity, LinkingStrategy};
 pub use error::{Error, Result};
 pub use extractor::GenAiExtractor;
+pub use knowledge_buffer::{EntityContext, KnowledgeBuffer};
 pub use types::{EntityType, RdfDocument, RdfEntity};
 pub use validation::{
     RdfValidator, Severity, ValidationConfig, ValidationResult, ValidationRule, Violation,

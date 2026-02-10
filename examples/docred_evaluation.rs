@@ -562,8 +562,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("\nText:\n{text}\n");
         }
 
-        // Extract RDF
-        let result = match extractor.extract(&text).await {
+        // Extract RDF using document-level chunking pipeline
+        // (automatically uses chunking for documents > 2000 tokens)
+        let result = match extractor.extract_from_document(&text).await {
             Ok(doc) => {
                 println!("✓ Extraction successful");
                 doc

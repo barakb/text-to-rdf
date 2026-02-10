@@ -42,7 +42,7 @@ When writing extraction logic, follow this sequence:
 - **Validation**: Every public function must be documented with `///` and include a `# Errors` section.
 - **Testing**: Include unit tests for extraction logic using small, deterministic text samples.
 - **Warning-Free Compilation**:
-    - **Always** run `cargo fmt --all`, `cargo check` and `cargo lint` and run all the examples, before considering work complete.
+    - **Always** run `cargo fmt --all`, `cargo check` and `cargo lint` and run all the examples, before considering work complete, deleted generated scripts that are not needed and update all docs.
     - Code **must** compile without warnings. Use `#[allow(dead_code)]` only when the field/code is intentionally preserved for data structure completeness or future use.
     - Never commit code with `unused` warnings.
 - **Commands**:
