@@ -31,7 +31,8 @@ impl SemanticChunker {
     /// # Arguments
     /// * `max_chunk_size` - Maximum characters per chunk
     /// * `overlap_chars` - Number of overlapping characters between chunks
-    pub fn new(max_chunk_size: usize, overlap_chars: usize) -> Self {
+    #[must_use]
+    pub const fn new(max_chunk_size: usize, overlap_chars: usize) -> Self {
         Self {
             max_chunk_size,
             overlap_chars,
@@ -42,6 +43,7 @@ impl SemanticChunker {
     ///
     /// This uses sentence boundaries to avoid splitting mid-sentence,
     /// and includes overlap between chunks to maintain context.
+    #[must_use]
     pub fn chunk(&self, text: &str) -> Vec<DocumentChunk> {
         // Create text splitter with character-based chunking
         let splitter = TextSplitter::new(self.max_chunk_size);
@@ -60,11 +62,7 @@ impl SemanticChunker {
 
                 // Find the actual position of this chunk in the original text
                 // (accounting for overlap)
-                let start_offset = if idx == 0 {
-                    0
-                } else {
-                    current_offset
-                };
+                let start_offset = if idx == 0 { 0 } else { current_offset };
 
                 let end_offset = start_offset + chunk_len;
                 current_offset = end_offset.saturating_sub(self.overlap_chars);
@@ -81,26 +79,28 @@ impl SemanticChunker {
     }
 
     /// Check if a document needs chunking
-    pub fn needs_chunking(&self, text: &str) -> bool {
+    #[must_use]
+    pub const fn needs_chunking(&self, text: &str) -> bool {
         text.len() > self.max_chunk_size
     }
 
     /// Estimate the number of chunks for a document
-    pub fn estimate_chunk_count(&self, text: &str) -> usize {
+    #[must_use]
+    pub const fn estimate_chunk_count(&self, text: &str) -> usize {
         if !self.needs_chunking(text) {
             return 1;
         }
 
         let effective_chunk_size = self.max_chunk_size - self.overlap_chars;
-        (text.len() + effective_chunk_size - 1) / effective_chunk_size
+        text.len().div_ceil(effective_chunk_size)
     }
 }
 
 impl Default for SemanticChunker {
     fn default() -> Self {
         Self::new(
-            1500, // 1500 chars ≈ 300-400 tokens
-            200,  // 200 char overlap for context preservation
+            3500, // 3500 chars ≈ 875 tokens (optimal for document-level extraction)
+            400,  // 400 char overlap for better context preservation
         )
     }
 }
@@ -129,7 +129,10 @@ mod tests {
 
         let chunks = chunker.chunk(text);
 
-        assert!(chunks.len() > 1, "Long text should be split into multiple chunks");
+        assert!(
+            chunks.len() > 1,
+            "Long text should be split into multiple chunks"
+        );
 
         // Check overlap exists
         for i in 1..chunks.len() {

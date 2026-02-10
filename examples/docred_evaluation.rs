@@ -37,7 +37,7 @@ use std::collections::HashSet;
 use std::env;
 use std::fs;
 use text_to_rdf::normalize::normalize_predicate;
-use text_to_rdf::{ExtractionConfig, GenAiExtractor, RdfExtractor};
+use text_to_rdf::{ExtractionConfig, GenAiExtractor};
 
 /// A document from the `DocRED` dataset
 #[derive(Debug, Deserialize)]

@@ -288,7 +288,7 @@ impl GenAiExtractor {
     }
 
     /// Estimate the number of tokens in text (rough approximation)
-    fn estimate_tokens(&self, text: &str) -> usize {
+    const fn estimate_tokens(text: &str) -> usize {
         // Rough approximation: 1 token ≈ 4 characters for English
         text.len() / 4
     }
@@ -304,10 +304,9 @@ impl GenAiExtractor {
         let context_summary = kb.get_context_summary();
 
         format!(
-            "{}\n\n===== DOCUMENT CONTEXT =====\n{}\
+            "{base_prompt}\n\n===== DOCUMENT CONTEXT =====\n{context_summary}\
             ===== END CONTEXT =====\n\n\
-            Use this context to resolve pronouns and entity references in the text below.",
-            base_prompt, context_summary
+            Use this context to resolve pronouns and entity references in the text below."
         )
     }
 
@@ -364,7 +363,7 @@ impl GenAiExtractor {
     }
 
     /// Merge documents from multiple chunks, deduplicating entities and triples
-    fn merge_chunks(&self, docs: Vec<RdfDocument>) -> RdfDocument {
+    fn merge_chunks(docs: Vec<RdfDocument>) -> RdfDocument {
         if docs.is_empty() {
             // Return empty document with schema.org context
             return RdfDocument {
@@ -417,14 +416,14 @@ impl GenAiExtractor {
     /// * `text` - The full document text
     ///
     /// # Returns
-    /// A merged RdfDocument containing all extracted entities and relations
+    /// A merged `RdfDocument` containing all extracted entities and relations
     ///
     /// # Errors
     ///
     /// Returns an error if extraction fails
     pub async fn extract_from_document(&self, text: &str) -> Result<RdfDocument> {
         // 1. Check if document needs chunking
-        let token_count = self.estimate_tokens(text);
+        let token_count = Self::estimate_tokens(text);
 
         // Use configurable threshold (default 2000, can be set lower for testing)
         let chunk_threshold = std::env::var("RDF_CHUNK_THRESHOLD")
@@ -479,7 +478,7 @@ impl GenAiExtractor {
 
         // 5. Merge and deduplicate
         println!("  Merging {} chunks", all_docs.len());
-        Ok(self.merge_chunks(all_docs))
+        Ok(Self::merge_chunks(all_docs))
     }
 }
 

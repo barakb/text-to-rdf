@@ -29,6 +29,7 @@ pub struct EntityContext {
 
 impl KnowledgeBuffer {
     /// Create a new empty knowledge buffer
+    #[must_use]
     pub fn new() -> Self {
         Self {
             entities: HashMap::new(),
@@ -36,16 +37,10 @@ impl KnowledgeBuffer {
     }
 
     /// Add an entity discovered in a chunk
-    pub fn add_entity(
-        &mut self,
-        name: &str,
-        entity_type: &str,
-        offset: usize,
-        chunk_id: usize,
-    ) {
+    pub fn add_entity(&mut self, name: &str, entity_type: &str, offset: usize, chunk_id: usize) {
         self.entities
             .entry(name.to_lowercase())
-            .or_insert(EntityContext {
+            .or_insert_with(|| EntityContext {
                 canonical_name: name.to_string(),
                 entity_type: entity_type.to_string(),
                 first_mention_offset: offset,
@@ -78,27 +73,30 @@ impl KnowledgeBuffer {
     }
 
     /// Get a formatted summary of entities for prompt injection
+    #[must_use]
     pub fn get_context_summary(&self) -> String {
+        use std::fmt::Write;
+
         if self.entities.is_empty() {
             return String::new();
         }
 
         let mut summary = String::from("ENTITIES ALREADY DISCOVERED IN THIS DOCUMENT:\n");
 
-        for (_, ctx) in &self.entities {
-            summary.push_str(&format!("- {} ({})", ctx.canonical_name, ctx.entity_type));
+        for ctx in self.entities.values() {
+            write!(summary, "- {} ({})", ctx.canonical_name, ctx.entity_type).ok();
 
             if !ctx.aliases.is_empty() {
-                summary.push_str(&format!(" [also called: {}]", ctx.aliases.join(", ")));
+                write!(summary, " [also called: {}]", ctx.aliases.join(", ")).ok();
             }
 
             if !ctx.properties.is_empty() {
                 let props: Vec<String> = ctx
                     .properties
                     .iter()
-                    .map(|(k, v)| format!("{}: {}", k, v))
+                    .map(|(k, v)| format!("{k}: {v}"))
                     .collect();
-                summary.push_str(&format!(" [{}]", props.join(", ")));
+                write!(summary, " [{}]", props.join(", ")).ok();
             }
 
             summary.push('\n');
@@ -108,10 +106,11 @@ impl KnowledgeBuffer {
     }
 
     /// Resolve an alias to canonical name
+    #[must_use]
     pub fn resolve_alias(&self, text: &str) -> Option<String> {
         let text_lower = text.to_lowercase();
 
-        for (_, ctx) in &self.entities {
+        for ctx in self.entities.values() {
             if ctx.aliases.iter().any(|a| a == &text_lower) {
                 return Some(ctx.canonical_name.clone());
             }
@@ -121,6 +120,7 @@ impl KnowledgeBuffer {
     }
 
     /// Get the most recent entity of a specific type
+    #[must_use]
     pub fn get_last_entity_of_type(&self, entity_type: &str) -> Option<String> {
         self.entities
             .values()
@@ -130,11 +130,13 @@ impl KnowledgeBuffer {
     }
 
     /// Check if an entity has been discovered
+    #[must_use]
     pub fn has_entity(&self, name: &str) -> bool {
         self.entities.contains_key(&name.to_lowercase())
     }
 
     /// Get all entities of a specific type
+    #[must_use]
     pub fn get_entities_of_type(&self, entity_type: &str) -> Vec<&EntityContext> {
         self.entities
             .values()
@@ -143,11 +145,13 @@ impl KnowledgeBuffer {
     }
 
     /// Get total number of entities tracked
+    #[must_use]
     pub fn entity_count(&self) -> usize {
         self.entities.len()
     }
 
     /// Get an entity context by name
+    #[must_use]
     pub fn get_entity(&self, name: &str) -> Option<&EntityContext> {
         self.entities.get(&name.to_lowercase())
     }
@@ -204,7 +208,10 @@ mod tests {
         kb.add_property("Apple Inc.", "location", "Cupertino");
 
         let entity = kb.get_entity("Apple Inc.").unwrap();
-        assert_eq!(entity.properties.get("foundedYear"), Some(&"1976".to_string()));
+        assert_eq!(
+            entity.properties.get("foundedYear"),
+            Some(&"1976".to_string())
+        );
         assert_eq!(
             entity.properties.get("location"),
             Some(&"Cupertino".to_string())

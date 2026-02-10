@@ -1,0 +1,77 @@
+Pierre Curie (15 May 1859 – 19 April 1906) was a French physicist and chemist, and a pioneer in crystallography and magnetism. He shared one half of the 1903 Nobel Prize in Physics with his wife, Marie Curie, for their work on radioactivity. With their win, the Curies became the first married couple to win a Nobel Prize, launching the Curie family legacy of five Nobel Prizes.
+
+
+== Education and career ==
+Pierre Curie was born on 15 May 1859 in Paris, France, as the son of Eugène Curie (1827–1910), a doctor of Huguenot origin from Alsace, and Sophie-Claire Depouilly (1832–1897). He was educated by his father, and in his early teens showed a strong aptitude for mathematics and geometry.
+In 1878, Curie earned his License in Physics from the Faculty of Sciences at the Sorbonne, and worked as a laboratory demonstrator until 1882, when he joined the faculty at ESPCI Paris.
+In 1895, Curie received his D.Sc. from the Sorbonne and was appointed Professor of Physics. The submission material for his doctorate consisted of his research on magnetism. In 1900, he was promoted to Professor in the Faculty of Sciences, and in 1904 became Titular Professor.
+
+
+== Research ==
+
+
+=== Piezoelectricity ===
+In 1880, Pierre and his older brother, Jacques, demonstrated that an electric potential was generated when crystals were compressed, i.e. piezoelectricity. To aid this work, they invented the piezoelectric quartz electrometer. In 1881, they demonstrated the reverse effect; that crystals could be made to deform when subject to an electric field. Almost all digital electronic circuits now rely on this in the form of crystal oscillators. In subsequent work on magnetism, he defined the Curie scale. This work also involved delicate equipment – balances, electrometers, etc.
+
+
+=== Magnetism ===
+
+Before his famous doctoral studies on magnetism, Curie designed and perfected an extremely sensitive torsion balance for measuring magnetic coefficients. Variations on this equipment were commonly used by future workers in that area. He studied ferromagnetism, paramagnetism, and diamagnetism for his doctoral thesis, and discovered the effect of temperature on paramagnetism which is now known as Curie's law. The material constant in Curie's law is known as the Curie constant. He also discovered that ferromagnetic substances exhibited a critical temperature transition, above which the substances lost their ferromagnetic behavior. This is now known as the Curie temperature. The Curie temperature is used to study plate tectonics, treat hypothermia, measure caffeine, and to understand extraterrestrial magnetic fields. The curie is a unit of measurement (3.7 × 1010 decays per second or 37 gigabecquerels) used to describe the intensity of a sample of radioactive material and was named after Marie and Pierre Curie by the Radiology Congress in 1910.
+
+
+=== Curie's principle ===
+
+Curie formulated what is now known as the Curie Dissymmetry Principle: a physical effect cannot have a dissymmetry absent from its efficient cause. For example, a random mixture of sand in zero gravity has no dissymmetry (it is isotropic). Introduce a gravitational field, and there is a dissymmetry because of the direction of the field. Then the sand grains can 'self-sort' with the density increasing with depth. But this new arrangement, with the directional arrangement of sand grains, actually reflects the dissymmetry of the gravitational field that causes the separation.
+
+
+=== Radioactivity ===
+
+Curie worked with his wife in isolating polonium and radium. They were the first to use the term radioactivity, and were pioneers in its study. Their work, including Marie Curie's celebrated doctoral work, made use of a sensitive piezoelectric electrometer constructed by Pierre and his brother Jacques Curie. Curie's 26 December 1898 publication with his wife and M. G. Bémont for their discovery of radium and polonium was honored by a Citation for Chemical Breakthrough Award from the Division of History of Chemistry of the American Chemical Society presented to the ESPCI ParisTech (officially the École supérieure de physique et de Chimie industrielles de la Ville de Paris) in 2015. In 1903, to honor the Curies' work, the Royal Society invited Pierre to present their research. Marie was not permitted to give the lecture, so Lord Kelvin sat beside her while Pierre spoke on their research. After this, Kelvin held a luncheon for Pierre. While in London, Pierre and Marie were awarded the Davy Medal of the Royal Society. In 1903, Pierre and Marie Curie, as well as Henri Becquerel, were awarded the Nobel Prize in Physics for their research on radioactivity.
+Curie and one of his students, Albert Laborde, made the first discovery of nuclear energy, by identifying the continuous emission of heat from radium particles. Curie also investigated the radiation emissions of radioactive substances, and through the use of magnetic fields was able to show that some of the emissions were positively charged, some were negative and some were neutral. These correspond to alpha, beta, and gamma radiation.
+
+
+=== Spiritualism ===
+In the late nineteenth century, Curie was investigating the mysteries of ordinary magnetism when he became aware of the spiritualist experiments of other French scientists, such as Charles Richet and Camille Flammarion. He initially thought the systematic investigation into the paranormal could help with some unanswered questions about magnetism. He wrote to Marie, then his fiancée:  "I must admit that those spiritual phenomena intensely interest me. I think they are questions that deal with physics." Pierre Curie's notebooks from this period show he read many books on spiritualism. He did not attend séances such as those of Eusapia Palladino in Paris in June 1905 as a mere spectator, and his goal certainly was not to communicate with spirits. He saw the séances as scientific experiments, tried to monitor different parameters, and took detailed notes of every observation. Curie considered himself an atheist.
+
+
+== Family ==
+
+Pierre Curie's grandfather, Paul Curie (1799–1853), a doctor of medicine, was a committed Malthusian humanist and married Augustine Hofer, daughter of Jean Hofer and great-granddaughter of Jean-Henri Dollfus, great industrialists from Mulhouse in the second half of the 18th century and the first part of the 19th century.
+Through this paternal grandmother, Pierre Curie is also a direct descendant of the Basel scientist and mathematician Jean Bernoulli (1667–1748), as is Pierre-Gilles de Gennes, winner of the 1991 Nobel Prize in Physics.
+
+Curie was introduced to Maria Skłodowska by their friend, physicist Józef Wierusz-Kowalski. Curie took her into his laboratory as his student. His admiration for her grew when he realised that she would not inhibit his research. He began to regard Skłodowska as his muse. She refused his initial proposal, but finally agreed to marry him on 26 July 1895.
+
+It would be a beautiful thing, a thing I dare not hope if we could spend our life near each other, hypnotized by our dreams: your patriotic dream, our humanitarian dream, and our scientific dream.  [Pierre Curie to Maria Skłodowska] The Curies had a happy, affectionate marriage, and they were known for their devotion to each other.
+Pierre and Marie Curie's daughter, Irène, and their son-in-law, Frédéric Joliot-Curie, were also physicists involved in the study of radioactivity, and each also received Nobel prizes for their work. The Curies' other daughter, Ève, wrote a noted biography of her mother. She was the only member of the Curie family to not become a physicist.  Ève married Henry Richardson Labouisse Jr., who received a Nobel Peace Prize on behalf of UNICEF in 1965. Pierre and Marie Curie's granddaughter, Hélène Langevin-Joliot, is a professor of nuclear physics at the University of Paris, and their grandson, Pierre Joliot, who was named after Pierre Curie, is a noted biochemist.
+
+
+== Death ==
+
+On 19 April 1906, while crossing the busy Rue Dauphine in the rain at the Quai de Conti, Curie slipped and fell under a heavy horse-drawn cart; one of the wheels ran over his head, fracturing his skull and killing him instantly.
+Both the Curies experienced radium burns, both accidentally and voluntarily, and were exposed to extensive doses of radiation while conducting their research. They experienced radiation sickness and Marie Curie died from radiation-induced aplastic anemia in 1934. Even now, all their papers from the 1890s, even her cookbooks, are radioactive. Their laboratory books are kept in special lead boxes and people who want to see them have to wear protective clothing. Most of these items can be found at the Bibliothèque nationale de France. Had Pierre Curie not died in an accident, he would most likely have eventually died of the effects of radiation, as did his wife; their daughter, Irène; and her husband, Frédéric Joliot.
+In April 1995, Pierre and Marie Curie were moved from their original resting place, a family cemetery, and enshrined in the crypt of the Panthéon in Paris.
+
+
+== Recognition ==
+
+
+=== Awards ===
+
+
+=== Memberships ===
+
+
+== Notes ==
+
+
+== References ==
+
+
+== External links ==
+
+NobelPrize.org: History of Pierre and Marie
+Pierre Curie's Nobel prize
+Pierre Curie on Nobelprize.org  including the Nobel Lecture, 6 June 1905 Radioactive Substances, Especially Radium
+Biography American Institute of Physics Archived 16 February 2015 at the Wayback Machine
+Annotated bibliography for Pierre Curie from the Alsos Digital Library for Nuclear Issues Alsos Digital Library closure
+Curie's publication in French Academy of Sciences papers
