@@ -498,6 +498,7 @@ impl GenAiExtractor {
             return RdfDocument {
                 context: serde_json::json!("https://schema.org/"),
                 data: serde_json::json!({}),
+                provenance: None,
             };
         }
 
@@ -544,6 +545,7 @@ impl GenAiExtractor {
         RdfDocument {
             context,
             data: merged_data,
+            provenance: None,
         }
     }
 
@@ -645,6 +647,24 @@ impl GenAiExtractor {
                         eprintln!("  ⚠️  Chunk {} entity linking failed: {}", idx + 1, e);
                     }
 
+                    // Add provenance metadata if enabled
+                    if self.config.provenance_tracking {
+                        let provenance = crate::types::Provenance::new()
+                            .with_chunk_id(idx)
+                            .with_text_span(resolved_chunk.start_offset, resolved_chunk.end_offset)
+                            .with_method("llm".to_string())
+                            .with_source_text(resolved_chunk.text.clone());
+
+                        chunk_doc.set_provenance(provenance);
+
+                        if std::env::var("DEBUG_PROVENANCE").is_ok() {
+                            println!(
+                                "  📍 Provenance: chunk={}, span=({}, {})",
+                                idx, resolved_chunk.start_offset, resolved_chunk.end_offset
+                            );
+                        }
+                    }
+
                     // Update KB with discovered entities (with URIs if linked)
                     if let Some(obj) = chunk_doc.data.as_object() {
                         if let (Some(entity_type), Some(entity_name)) = (
@@ -704,6 +724,20 @@ impl RdfExtractor for GenAiExtractor {
         // Link entities to canonical URIs
         self.link_entities_in_document(&mut result, &resolved_text)
             .await?;
+
+        // Add provenance metadata if enabled
+        if self.config.provenance_tracking {
+            let provenance = crate::types::Provenance::new()
+                .with_text_span(0, text.len())
+                .with_method("llm".to_string())
+                .with_source_text(text.to_string());
+
+            result.set_provenance(provenance);
+
+            if std::env::var("DEBUG_PROVENANCE").is_ok() {
+                println!("📍 Provenance: short document, span=(0, {})", text.len());
+            }
+        }
 
         Ok(result)
     }

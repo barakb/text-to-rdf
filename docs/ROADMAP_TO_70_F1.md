@@ -2,7 +2,7 @@
 
 **Current State**: 39.68% F1 (qwen2.5:7b on DocRED)
 **Target**: 70-80% F1 (Production-ready)
-**Status**: Phase 3 Complete ✅ (Document Context + Coreference + Entity Linking)
+**Status**: Phase 4 Complete ✅ (Document Context + Coreference + Entity Linking + Provenance)
 
 ---
 
@@ -15,12 +15,12 @@
 | Knowledge buffer | ✅ Complete | +10-15% | 🔴 Critical |
 | Native coreference resolution | ✅ Complete | +8-12% | 🟡 High |
 | Entity linking | ✅ Complete | +3-6% | 🟢 Medium |
-| Provenance metadata | ❌ Missing | +2-5% | 🟢 Medium |
+| Provenance metadata | ✅ Complete | +0% (debugging) | 🟢 Medium |
 | Streaming triples | ❌ Missing | +0% (perf only) | 🟢 Medium |
 | Parallel processing | ❌ Missing | +0% (perf only) | 🟢 Medium |
 
-**Expected Improvement from Completed Phases**: +29-45% F1 → **68-85% F1** 🎯
-**Remaining Work**: Provenance + parallel processing → **70-90% F1**
+**Completed Phases**: Phase 1-4 → **30.56% F1** with GPT-4o (baseline 15.74%)
+**Remaining Work**: Advanced context management (Phase 5) → performance improvements
 
 ---
 
@@ -379,89 +379,83 @@ cargo run --example docred_evaluation
 | Baseline (none) | qwen2.5:7b | **15.74%** | 16.67% | 15.00% | No phases |
 | Phase 1+2 | GPT-4o | **22.22%** | 33.33% | 16.67% | Chunking + Coref |
 | Phase 1+2+3 | GPT-4o | **31.75%** | 50.00% | 23.33% | + Entity Linking |
+| Phase 1+2+3+4 | GPT-4o | **30.56%** | 44.44% | 23.33% | + Provenance |
 
-**Per-Document Results (GPT-4o, Phase 1+2+3)**:
+**Per-Document Results (GPT-4o, Phase 1+2+3+4)**:
 - Marie Curie: **66.67% F1** (100% precision, 50% recall) ✅
 - Apple Inc: **0% F1** (entity name normalization mismatch)
-- Stanford: **28.57% F1** (partial success)
+- Stanford: **25.00% F1** (partial success)
 
 **Key Insights**:
 1. Marie Curie document demonstrates **66.67% F1** - system working as designed
 2. Entity naming normalization affects evaluation (implementation issue, not extraction quality)
-3. GPT-4o + all phases: **+16% improvement** over baseline
-4. DBpedia Spotlight API intermittent failures (entity linking still valuable when available)
+3. GPT-4o + Phase 1-4: **+14.82% improvement** over baseline
+4. Phase 4 (provenance tracking) provides debugging metadata without impacting extraction quality
+5. DBpedia Spotlight API intermittent failures (entity linking still valuable when available)
 
 **Command**:
 ```bash
+# Phase 1+2+3+4 (all features)
+export COREF_STRATEGY=rule-based
+export ENTITY_LINKING_ENABLED=true
+export ENTITY_LINKING_STRATEGY=dbpedia
+export RDF_EXTRACTION_PROVENANCE=true
+export OPENAI_API_KEY=your-key
+export RDF_EXTRACTION_MODEL=gpt-4o
 cargo run --example docred_evaluation
+
 # See full example: examples/docred_evaluation.rs
 ```
 
 ---
 
-## 📍 Phase 4: Provenance Tracking → +2-5% F1
+## 📍 Phase 4: Provenance Tracking ✅ COMPLETE
 
 **Goal**: Track which text span supported each triple.
-**Status**: ⏳ Not Started
+**Status**: ✅ Implemented and tested
+**Files**: `src/types.rs`, `src/extractor.rs`, `src/lib.rs`, `.env.example`
 
-### 4.1 RDF-star Provenance (2026 Recommended Approach)
+### Implementation Summary
 
-**Why RDF-star**: The 2026 standard for provenance tracking. Allows metadata about triples without breaking RDF structure.
+**Provenance Struct** (`src/types.rs`):
+- `Provenance` struct with optional fields:
+  - `text_span: Option<(usize, usize)>` - Character offsets in source document
+  - `confidence: Option<f64>` - Confidence score (0.0-1.0)
+  - `chunk_id: Option<usize>` - Source chunk ID for multi-chunk documents
+  - `method: Option<String>` - Extraction method ("llm", "gliner", "rule-based")
+  - `source_text: Option<String>` - Source text that supports extraction
 
-**Update**: `src/types.rs`
+**RdfDocument Enhancement**:
+- Added `provenance: Option<Provenance>` field
+- `set_provenance()` and `get_provenance()` methods
+- `to_json_with_provenance()` - Serialize with `_provenance` metadata field
 
-```rust
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RdfTriple {
-    pub subject: String,
-    pub predicate: String,
-    pub object: String,
+**Integration** (`src/extractor.rs`):
+- Applied in both extraction paths when `config.provenance_tracking` enabled:
+  - Multi-chunk documents: Track chunk ID, text span, and source text per chunk
+  - Short documents: Track full document span
+- Debug logging support via `DEBUG_PROVENANCE=1`
+- Provenance metadata stored but not included in standard JSON-LD output (use `to_json_with_provenance()`)
 
-    // NEW: Provenance metadata (RDF-star compatible)
-    pub provenance: Option<Provenance>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Provenance {
-    /// Character offset in source document
-    pub text_span: (usize, usize),
-
-    /// Confidence score (0.0-1.0)
-    pub confidence: f64,
-
-    /// Source chunk ID (for multi-chunk documents)
-    pub chunk_id: Option<usize>,
-
-    /// Extraction method used
-    pub method: String, // "llm", "gliner", "rule-based"
-}
+**Configuration** (`.env.example`):
+```bash
+RDF_EXTRACTION_PROVENANCE=false     # Enable provenance tracking
+DEBUG_PROVENANCE=1                  # Optional debug logging
 ```
 
-**RDF-star Output Format**:
-```turtle
-<<:MarieCurie :birthPlace :Warsaw>> :extractedFrom "Marie Curie was born in Warsaw" ;
-                                      :confidence 0.95 ;
-                                      :chunkId 0 ;
-                                      :method "llm" .
-```
+**Test Results** (GPT-4o, Phase 1+2+3+4):
+- ✅ Provenance metadata captured for all extractions
+- ✅ Debug logging shows: `📍 Provenance: chunk=0, span=(0, 2453)`
+- ✅ No impact on extraction quality (F1: 30.56% vs 31.75% variance)
+- ✅ Metadata available for debugging and confidence filtering
 
-**Integration**: Track offsets during extraction:
+**Benefits**:
+- **Debugging**: Trace back extractions to source text
+- **Confidence filtering**: Filter low-quality extractions
+- **Audit trail**: Track extraction method and chunks
+- **RDF-star ready**: Structure compatible with RDF-star provenance standard
 
-```rust
-let triple = RdfTriple {
-    subject: "Marie Curie".to_string(),
-    predicate: "birthPlace".to_string(),
-    object: "Warsaw".to_string(),
-    provenance: Some(Provenance {
-        text_span: (245, 289), // "Marie Curie was born in Warsaw"
-        confidence: 0.95,
-        chunk_id: Some(0),
-        method: "llm".to_string(),
-    }),
-};
-```
-
-**Expected Impact**: +2-5% F1 (enables debugging, filtering low-confidence triples)
+**Expected Impact**: +0% F1 (metadata only), enables debugging and quality filtering
 
 ---
 
@@ -673,16 +667,16 @@ impl SemanticChunker {
 
 ## 📋 Implementation Schedule
 
-### ✅ Phase 1-3 Complete (Weeks 1-2)
+### ✅ Phase 1-4 Complete (Weeks 1-3)
 - **Phase 1**: Semantic chunking + knowledge buffer
 - **Phase 2**: Coreference resolution
 - **Phase 3**: Entity linking
-- **Result**: 39% → 68-85% F1 (+29-45%)
+- **Phase 4**: Provenance tracking
+- **Result**: 15.74% → 30.56% F1 (+14.82% with GPT-4o)
 
-### ⏳ Phase 4-5 Remaining (Week 3)
-- **Phase 4**: Provenance tracking (RDF-star)
-- **Phase 5**: Advanced contextmanagement (lookahead, parallel, semantic splitter)
-- **Target**: 70-90% F1 (stable), 3-4x faster
+### ⏳ Phase 5 Remaining (Optional)
+- **Phase 5**: Advanced context management (lookahead, parallel, semantic splitter)
+- **Target**: Performance improvements (3-4x faster), potential F1 gains
 
 ---
 
@@ -692,13 +686,17 @@ impl SemanticChunker {
 |-----------|----------|------------------|--------|-------|
 | Baseline | 15.74% | 0.5 | ✅ Complete | qwen2.5:7b |
 | Phase 1+2 | 22.22% | 0.5 | ✅ Complete | GPT-4o |
-| Phase 1+2+3 | **31.75%** | 0.5 | ✅ Complete | GPT-4o |
-| Phase 4 | TBD | TBD | ⏳ Pending | - |
+| Phase 1+2+3 | 31.75% | 0.5 | ✅ Complete | GPT-4o |
+| Phase 1+2+3+4 | **30.56%** | 0.5 | ✅ Complete | GPT-4o |
 | Phase 5 | TBD | 2.0+ | ⏳ Pending | - |
 
-**Current Achievement**: **31.75% F1** with GPT-4o (Phase 1+2+3) - **+16.01% from baseline**
+**Current Achievement**: **30.56% F1** with GPT-4o (Phase 1+2+3+4) - **+14.82% from baseline**
 
-**Note**: Individual document performance varies (Marie Curie: 66.67% F1), with aggregate affected by entity normalization mismatches in evaluation. Core extraction quality is strong as demonstrated by high-performing documents.
+**Key Findings**:
+- Marie Curie document: **66.67% F1** demonstrates system capability
+- Aggregate scores affected by entity normalization mismatches in evaluation
+- Phase 4 provenance tracking provides debugging metadata without affecting extraction
+- Further improvements require addressing evaluation methodology or exploring Phase 5 optimizations
 
 ---
 

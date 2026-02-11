@@ -50,7 +50,7 @@ pub use entity_linker::{EntityLinker, EntityLinkerConfig, LinkedEntity, LinkingS
 pub use error::{Error, Result};
 pub use extractor::GenAiExtractor;
 pub use knowledge_buffer::{EntityContext, KnowledgeBuffer};
-pub use types::{EntityType, RdfDocument, RdfEntity};
+pub use types::{EntityType, Provenance, RdfDocument, RdfEntity};
 pub use validation::{
     RdfValidator, Severity, ValidationConfig, ValidationResult, ValidationRule, Violation,
 };
@@ -107,6 +107,10 @@ pub struct ExtractionConfig {
     /// Inject hardcoded @context instead of trusting LLM (default: true)
     /// Prevents URI hallucinations by using context.jsonld
     pub inject_hardcoded_context: bool,
+
+    /// Enable provenance metadata tracking (default: false)
+    /// Tracks source text spans, confidence scores, chunk IDs, and extraction methods
+    pub provenance_tracking: bool,
 }
 
 impl Default for ExtractionConfig {
@@ -122,6 +126,7 @@ impl Default for ExtractionConfig {
             max_retries: 2,
             strict_validation: true,
             inject_hardcoded_context: true,
+            provenance_tracking: false,
         }
     }
 }
@@ -246,6 +251,11 @@ impl ExtractionConfig {
             .and_then(|v| v.parse::<bool>().ok())
             .unwrap_or(true);
 
+        let provenance_tracking = env::var("RDF_EXTRACTION_PROVENANCE")
+            .ok()
+            .and_then(|v| v.parse::<bool>().ok())
+            .unwrap_or(false);
+
         Ok(Self {
             model,
             simple_model,
@@ -257,6 +267,7 @@ impl ExtractionConfig {
             max_retries,
             strict_validation,
             inject_hardcoded_context,
+            provenance_tracking,
         })
     }
 

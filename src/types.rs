@@ -87,6 +87,85 @@ impl RdfEntity {
     }
 }
 
+/// Provenance metadata for tracking extraction source and confidence
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Provenance {
+    /// Character offset range in source document (start, end)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text_span: Option<(usize, usize)>,
+
+    /// Confidence score (0.0-1.0) for this extraction
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<f64>,
+
+    /// Source chunk ID (for multi-chunk documents)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chunk_id: Option<usize>,
+
+    /// Extraction method used
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub method: Option<String>, // "llm", "gliner", "rule-based"
+
+    /// Source text that supports this extraction
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_text: Option<String>,
+}
+
+impl Provenance {
+    /// Create a new provenance record
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            text_span: None,
+            confidence: None,
+            chunk_id: None,
+            method: None,
+            source_text: None,
+        }
+    }
+
+    /// Set text span
+    #[must_use]
+    pub fn with_text_span(mut self, start: usize, end: usize) -> Self {
+        self.text_span = Some((start, end));
+        self
+    }
+
+    /// Set confidence score
+    #[must_use]
+    pub fn with_confidence(mut self, confidence: f64) -> Self {
+        self.confidence = Some(confidence);
+        self
+    }
+
+    /// Set chunk ID
+    #[must_use]
+    pub fn with_chunk_id(mut self, chunk_id: usize) -> Self {
+        self.chunk_id = Some(chunk_id);
+        self
+    }
+
+    /// Set extraction method
+    #[must_use]
+    pub fn with_method(mut self, method: impl Into<String>) -> Self {
+        self.method = Some(method.into());
+        self
+    }
+
+    /// Set source text
+    #[must_use]
+    pub fn with_source_text(mut self, text: impl Into<String>) -> Self {
+        self.source_text = Some(text.into());
+        self
+    }
+}
+
+impl Default for Provenance {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// An RDF document containing entities in JSON-LD format
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RdfDocument {
@@ -95,6 +174,10 @@ pub struct RdfDocument {
 
     #[serde(flatten)]
     pub data: Value,
+
+    /// Optional provenance metadata (not serialized to JSON-LD by default)
+    #[serde(skip)]
+    pub provenance: Option<Provenance>,
 }
 
 impl RdfDocument {
@@ -137,6 +220,7 @@ impl RdfDocument {
         Ok(Self {
             context,
             data: value,
+            provenance: None,
         })
     }
 
@@ -196,6 +280,61 @@ impl RdfDocument {
     pub fn enrich_with_uri(&mut self, uri: impl Into<String>) {
         if let Some(obj) = self.data.as_object_mut() {
             obj.insert("@id".to_string(), Value::String(uri.into()));
+        }
+    }
+
+    /// Set provenance metadata for this document
+    pub fn set_provenance(&mut self, provenance: Provenance) {
+        self.provenance = Some(provenance);
+    }
+
+    /// Get provenance metadata
+    #[must_use]
+    pub fn get_provenance(&self) -> Option<&Provenance> {
+        self.provenance.as_ref()
+    }
+
+    /// Convert to JSON with provenance metadata included
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if serialization fails
+    pub fn to_json_with_provenance(&self) -> Result<String> {
+        if let Some(prov) = &self.provenance {
+            let mut output = serde_json::Map::new();
+
+            // Add the main document data
+            if let Some(obj) = self.data.as_object() {
+                for (key, value) in obj {
+                    output.insert(key.clone(), value.clone());
+                }
+            }
+
+            // Add provenance metadata
+            let mut prov_obj = serde_json::Map::new();
+            if let Some((start, end)) = prov.text_span {
+                prov_obj.insert("textSpan".to_string(), serde_json::json!({"start": start, "end": end}));
+            }
+            if let Some(conf) = prov.confidence {
+                prov_obj.insert("confidence".to_string(), serde_json::json!(conf));
+            }
+            if let Some(chunk_id) = prov.chunk_id {
+                prov_obj.insert("chunkId".to_string(), serde_json::json!(chunk_id));
+            }
+            if let Some(method) = &prov.method {
+                prov_obj.insert("method".to_string(), serde_json::json!(method));
+            }
+            if let Some(source) = &prov.source_text {
+                prov_obj.insert("sourceText".to_string(), serde_json::json!(source));
+            }
+
+            if !prov_obj.is_empty() {
+                output.insert("_provenance".to_string(), serde_json::Value::Object(prov_obj));
+            }
+
+            serde_json::to_string_pretty(&output).map_err(Error::from)
+        } else {
+            self.to_json()
         }
     }
 

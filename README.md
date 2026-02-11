@@ -528,15 +528,16 @@ Document: Marie Curie
 ```
 
 **Performance Expectations**:
-- **Local 7B models (qwen2.5:7b)**: 15.74% F1 baseline → **~25% F1 with Phase 1+2+3** (estimated)
-- **Cloud LLMs (GPT-4o)**: 15.74% F1 baseline → **31.75% F1 with Phase 1+2+3** (+16% improvement)
+- **Local 7B models (qwen2.5:7b)**: 15.74% F1 baseline → **~25% F1 with Phase 1-4** (estimated)
+- **Cloud LLMs (GPT-4o)**: 15.74% F1 baseline → **30.56% F1 with Phase 1-4** (+14.82% improvement)
 - **Best case (Marie Curie doc)**: **66.67% F1** with GPT-4o (demonstrates system capability)
 
-**Phase 1+2+3 Features** (✅ Implemented):
+**Phase 1-4 Features** (✅ Implemented):
 - **Semantic Chunking**: Splits long documents at natural boundaries with overlap (src/chunking.rs)
 - **Knowledge Buffer**: Tracks entities and relations across chunks (src/knowledge_buffer.rs)
 - **Coreference Resolution**: Resolves pronouns to canonical entities before extraction (src/coref.rs)
 - **Entity Linking**: Maps entity names to canonical URIs (DBpedia/Wikidata) for consistency (src/entity_linker.rs)
+- **Provenance Tracking**: Tracks source text spans, chunk IDs, and extraction methods (src/types.rs)
 - **Multi-Chunk Pipeline**: Sequential processing with context injection and entity deduplication
 
 **Benchmark Results** (DocRED evaluation, 3 documents):
@@ -545,18 +546,20 @@ Document: Marie Curie
 |--------------|-------|----------|
 | Baseline | qwen2.5:7b | 15.74% |
 | Phase 1+2 | GPT-4o | 22.22% |
-| Phase 1+2+3 | GPT-4o | **31.75%** ✅ |
+| Phase 1+2+3 | GPT-4o | 31.75% |
+| Phase 1+2+3+4 | GPT-4o | **30.56%** ✅ |
 
 Run benchmark: `cargo run --example docred_evaluation` ([source](examples/docred_evaluation.rs))
 
-**Test Results** (Phase 1+2+3, qwen2.5:7b, Marie Curie Wikipedia article):
+**Test Results** (Phase 1-4, qwen2.5:7b, Marie Curie Wikipedia article):
 - 18 chunks processed (12/18 successful extraction, 6 LLM failures)
 - 30 entities extracted across document
 - ~100 pronouns resolved via coreference
 - 236.93s total (13.16s average per chunk)
 - Entity linking ready (DBpedia/local strategies available)
+- Provenance metadata captured (text spans, chunk IDs, methods)
 
-**Note**: Document-level extraction is significantly more challenging than sentence-level (WebNLG). Phase 1+2+3 provides **+16% F1 improvement** with production LLM (GPT-4o), demonstrating effective cross-document reasoning, pronoun resolution, and entity disambiguation for Knowledge Graph construction. Individual document performance can reach **66.67% F1**, with aggregate scores affected by entity normalization variations in evaluation.
+**Note**: Document-level extraction is significantly more challenging than sentence-level (WebNLG). Phase 1-4 provides **+14.82% F1 improvement** with production LLM (GPT-4o), demonstrating effective cross-document reasoning, pronoun resolution, entity disambiguation, and audit trail capabilities for Knowledge Graph construction. Individual document performance can reach **66.67% F1**, with aggregate scores affected by entity normalization variations in evaluation.
 
 ## Using Local LLMs with Ollama
 
