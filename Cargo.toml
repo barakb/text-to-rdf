@@ -36,4 +36,4 @@ pedantic = "warn"
 
 [dev-dependencies]
 anyhow = "1.0.101"
-ureq = "2.10"  # Keep 2.x for stable API
+ureq = "3.0"  # Keep 2.x for stable API
